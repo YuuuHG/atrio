@@ -14,6 +14,8 @@ What changes in each Atrio release. The section for a version is also the text o
 
 **Fixed**
 
+- A sharp line in the wallpaper, like the snowy ridge of the default one, showed through the app tiles as a line
+  across them: the glass of tiles and panels blurs twice as much now.
 - **The install command from the web terminal of CasaOS or Atrio** looked stuck at "Installing Atrio": that terminal
   goes through the CasaOS gateway, which the updater restarts, so its session closed there. The install did finish,
   but did not say so. Now it says before the restart that the window will close and that the install goes on, and
