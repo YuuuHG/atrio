@@ -29,6 +29,20 @@ pnpm build
 
 The build goes to `build/sysroot/var/lib/casaos/www/`, which is the folder CasaOS serves its UI from.
 
+## Test the services on the server
+
+The services that run as root on the server (`scripts/atrio-update`, `atrio-alerts`, `atrio-backup` and
+`atrio-setup`) have tests in `tests/server`. Each test runs them in its own sandbox with a fake `docker`, `curl` and
+`systemctl`, so nothing on your machine changes and no root is needed:
+
+```bash
+pnpm test:server
+```
+
+They need bash, python3, openssl, gpg and flock, and also run on GitHub for every change to `scripts/` or
+`tests/server/`. To try a change on a real server, `sudo ATRIO_SOURCE=$PWD/scripts bash scripts/install.sh` installs
+the services of your checkout.
+
 ## Release
 
 1. Add a section for the new version at the top of [CHANGELOG.md](CHANGELOG.md) (`## 0.2.0 — date`), with

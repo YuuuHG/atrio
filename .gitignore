@@ -39,3 +39,6 @@ unused-files.json
 # Planning notes stay local; only the README screenshots are published
 /docs/*
 !/docs/screenshots/
+
+# Sandboxes of the tests in tests/server
+/tests/server/.tmp/

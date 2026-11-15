@@ -1,0 +1,3 @@
+#!/bin/sh
+# The tests do not run as root
+exit 0

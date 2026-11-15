@@ -1,0 +1,24 @@
+name: Server tests
+
+# The services that run as root on the server (scripts/atrio-*), tested with a fake docker
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/**
+      - tests/server/**
+      - .github/workflows/test-server.yml
+  pull_request:
+    paths:
+      - scripts/**
+      - tests/server/**
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the syntax of every script
+        run: for f in scripts/*.sh scripts/atrio-update scripts/atrio-alerts scripts/atrio-backup scripts/atrio-setup; do bash -n "$f"; done
+      - name: Run the tests
+        run: bash tests/server/run.sh

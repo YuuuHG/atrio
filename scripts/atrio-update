@@ -6,8 +6,8 @@
 set -euo pipefail
 
 REPO="peppeaiello/atrio"
-WWW="/var/lib/casaos/www"
-STATE="/var/lib/casaos/atrio"
+WWW="${ATRIO_WWW:-/var/lib/casaos/www}"
+STATE="${ATRIO_STATE:-/var/lib/casaos/atrio}"
 STATUS="$STATE/update-status.json"
 REQUEST="$STATE/update-request"
 BACKUP="$STATE/casaos-ui-original"

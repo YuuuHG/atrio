@@ -1,0 +1,3 @@
+#!/bin/sh
+# Records the calls instead of touching systemd
+echo "systemctl $*" >> "${FAKE_DOCKER:-/tmp}/calls.log"

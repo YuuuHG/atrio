@@ -11,6 +11,13 @@ What changes in each Atrio release. The section for a version is also the text o
   Atrio row in the settings and a notification now show the install command to run once; after that, updates bring
   the services too.
 
+**For developers**
+
+- **Tests for the services on the server.** `pnpm test:server` runs about 150 checks of the updater, push alerts,
+  backups and setup: backups and restores, refused archives and settings files, schedules, updates and the way back,
+  image cleanup, signed releases. Each runs in a sandbox with a fake docker, and GitHub runs them on every change.
+  `atrio-update` and `atrio-setup` take `ATRIO_STATE`, `ATRIO_WWW` and `ATRIO_ROOT` for that.
+
 ## 0.1.18 — 2026-11-13
 
 **If you installed Atrio before 0.1.17, run the install command once more**, even after updating from the settings:

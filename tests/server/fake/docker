@@ -1,0 +1,208 @@
+#!/usr/bin/env python3
+"""A stand-in for docker in the tests of the services on the server (tests/server).
+
+State lives in $FAKE_DOCKER, as JSON: containers (id, project, service, ref, image, state, mounts) and
+images (id, size, created, tags, digests). Registry images that `compose pull` can fetch are in
+registry: { ref: { id, digest } }. Files in that folder change its behaviour:
+  pull-fails     compose pull fails
+  crash          containers started from an image named in it (one per line) keep restarting
+Every call is appended to calls.log.
+"""
+import json, os, re, sys
+
+DIR = os.environ['FAKE_DOCKER']
+STATE = os.path.join(DIR, 'state.json')
+
+
+def load():
+    with open(STATE) as f:
+        return json.load(f)
+
+
+def save(state):
+    with open(STATE + '.tmp', 'w') as f:
+        json.dump(state, f, indent=1)
+    os.replace(STATE + '.tmp', STATE)
+
+
+def flag(name):
+    return os.path.exists(os.path.join(DIR, name))
+
+
+def crashes(ref):
+    path = os.path.join(DIR, 'crash')
+    return os.path.exists(path) and ref in open(path).read().split()
+
+
+def compose_images(path):
+    """service -> image, from the services' own image lines (4 spaces, as CasaOS writes them)."""
+    images, service, top = {}, None, False
+    for line in open(path):
+        if re.match(r'^\S', line):
+            top = line.startswith('services:')
+            service = None
+            continue
+        if not top:
+            continue
+        m = re.match(r'^    ([A-Za-z0-9._-]+):\s*$', line)
+        if m:
+            service = m.group(1)
+            continue
+        m = re.match(r'^        image:\s*(\S+)', line)
+        if m and service:
+            images[service] = m.group(1).strip('"\'')
+    return images
+
+
+def image_by_ref(state, ref):
+    for image in state['images']:
+        if ref in image['tags'] or image['id'] == ref:
+            return image
+    return None
+
+
+def filters(args):
+    out = {}
+    for i, arg in enumerate(args):
+        if arg == '--filter':
+            key, _, value = args[i + 1].partition('=')
+            if key == 'label':
+                k, _, v = value.partition('=')
+                out[k] = v
+    return out
+
+
+def matches(container, labels):
+    if 'com.docker.compose.project' in labels and container['project'] != labels['com.docker.compose.project']:
+        return False
+    if 'com.docker.compose.service' in labels and container['service'] != labels['com.docker.compose.service']:
+        return False
+    return True
+
+
+def inspect_container(c, fmt, state):
+    if '.Mounts' in fmt:
+        return ''.join(m + '\n' for m in c['mounts'])
+    if '.State.Status' in fmt:
+        status = c['state']
+        return f"{status} {1 if status == 'restarting' else 0} {3 if status == 'restarting' else 0}\n"
+    if 'com.docker.compose.service' in fmt and '={{.Image}}' in fmt:
+        return f"{c['service']}={c['image']}\n"
+    if 'com.docker.compose.service' in fmt:
+        return f"{c['service']}\t{c['ref']}\t{c['image']}\n"
+    if '.Config.Image' in fmt:
+        return c['ref'] + '\n'
+    if fmt == '{{.Image}}':
+        return c['image'] + '\n'
+    raise SystemExit(f'fake docker: unknown inspect format {fmt}')
+
+
+def inspect_image(image, fmt):
+    if fmt == '{{.Id}}':
+        return image['id'] + '\n'
+    if '.RepoDigests' in fmt:
+        return ''.join(f"{image['tags'][0].rsplit(':', 1)[0] if image['tags'] else 'x'}@{d}\n" for d in image['digests'])
+    if '.Size' in fmt:
+        return f"{image['id']}\t{image['size']}\t{image['created']}\t{' '.join(image['tags'])}\n"
+    raise SystemExit(f'fake docker: unknown image format {fmt}')
+
+
+def compose(args, state):
+    project = args[args.index('-p') + 1]
+    path = args[args.index('-f') + 1]
+    command = [a for a in args[args.index('-f') + 2:]]
+    mine = [c for c in state['containers'] if c['project'] == project]
+    if command[:1] == ['pull']:
+        if flag('pull-fails'):
+            return 1
+        for service, ref in compose_images(path).items():
+            new = state.get('registry', {}).get(ref)
+            if not new:
+                continue
+            for image in state['images']:
+                if ref in image['tags'] and image['id'] != new['id']:
+                    image['tags'].remove(ref)
+            existing = image_by_ref(state, new['id'])
+            if existing:
+                existing['tags'].append(ref)
+            else:
+                state['images'].append({'id': new['id'], 'size': 1000, 'created': '2026-11-01T00:00:00Z', 'tags': [ref], 'digests': [new['digest']]})
+        return 0
+    if command[:1] == ['up']:
+        start = '--no-start' not in command
+        for service, ref in compose_images(path).items():
+            image = image_by_ref(state, ref)
+            if not image:
+                return 1
+            for c in mine:
+                if c['service'] == service:
+                    c['ref'], c['image'] = ref, image['id']
+                    c['state'] = ('restarting' if crashes(ref) else 'running') if start else 'exited'
+        return 0
+    if command[:1] == ['start']:
+        for c in mine:
+            c['state'] = 'restarting' if crashes(c['ref']) else 'running'
+        return 0
+    if command[:1] == ['version']:
+        return 0
+    raise SystemExit(f'fake docker: unknown compose command {command}')
+
+
+def main(args):
+    with open(os.path.join(DIR, 'calls.log'), 'a') as log:
+        log.write(' '.join(args) + '\n')
+    state = load()
+    out = sys.stdout
+    if args[:2] == ['compose', 'version']:
+        return 0
+    if args[:1] == ['compose']:
+        code = compose(args, state)
+        save(state)
+        return code
+    if args[:1] == ['ps']:
+        labels = filters(args)
+        everything = '-a' in args or '-aq' in args
+        found = [c for c in state['containers'] if matches(c, labels) and (everything or c['state'] in ('running', 'restarting'))]
+        if '--format' in args:
+            out.write(''.join(c['ref'] + '\n' for c in found))
+        else:
+            out.write(''.join(c['id'] + '\n' for c in found))
+        return 0
+    if args[:1] == ['inspect']:
+        fmt = args[2]
+        for cid in args[3:]:
+            c = next((c for c in state['containers'] if c['id'] == cid), None)
+            if c is None:
+                return 1
+            out.write(inspect_container(c, fmt, state))
+        return 0
+    if args[:2] == ['image', 'inspect']:
+        image = image_by_ref(state, args[4])
+        if image is None:
+            return 1
+        out.write(inspect_image(image, args[3]))
+        return 0
+    if args[:1] == ['images']:
+        out.write(''.join(i['id'] + '\n' for i in state['images']))
+        return 0
+    if args[:2] == ['image', 'rm']:
+        image = image_by_ref(state, args[-1])
+        if image is None:
+            return 1
+        state['images'].remove(image)
+        save(state)
+        return 0
+    if args[:1] == ['info']:
+        out.write(DIR + '\n')
+        return 0
+    if args[:1] in (['stop'], ['start']):
+        ids = [a for a in args[1:] if not a.startswith('-') and not a.isdigit()]
+        for c in state['containers']:
+            if c['id'] in ids:
+                c['state'] = 'exited' if args[0] == 'stop' else ('restarting' if crashes(c['ref']) else 'running')
+        save(state)
+        return 0
+    raise SystemExit(f'fake docker: unknown command {args}')
+
+
+sys.exit(main(sys.argv[1:]))

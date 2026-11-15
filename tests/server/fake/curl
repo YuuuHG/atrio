@@ -1,0 +1,36 @@
+#!/usr/bin/env python3
+"""A stand-in for curl in the tests: registries and push services, with no network.
+
+Registry manifests (HEAD .../v2/<repo>/manifests/<tag>) answer with the digest in $FAKE_DOCKER/state.json
+under remote["<host>/<repo>:<tag>"], or 404. Anything else (a push alert) is logged to sent.log and
+answered 200, or 400 when the file push-fails exists.
+"""
+import json, os, re, shutil, sys
+
+args = sys.argv[1:]
+DIR = os.environ['FAKE_DOCKER']
+url = next(a for a in reversed(args) if a.startswith(('http://', 'https://', 'file://')))
+# Local files (a release made by a test) go to the real curl
+if url.startswith('file://'):
+    here = os.path.dirname(os.path.abspath(__file__))
+    path = os.pathsep.join(p for p in os.environ['PATH'].split(os.pathsep) if os.path.abspath(p) != here)
+    real = shutil.which('curl', path=path)
+    os.execv(real, ['curl'] + args)
+m = re.match(r'https://([^/]+)/v2/(.+)/manifests/([^/]+)$', url)
+if m:
+    state = json.load(open(os.path.join(DIR, 'state.json')))
+    digest = state.get('remote', {}).get(f'{m.group(1)}/{m.group(2)}:{m.group(3)}')
+    if digest:
+        sys.stdout.write(f'HTTP/1.1 200 OK\r\nDocker-Content-Digest: {digest}\r\n\r\n')
+    else:
+        sys.stdout.write('HTTP/1.1 404 Not Found\r\n\r\n')
+    sys.exit(0)
+
+with open(os.path.join(DIR, 'sent.log'), 'a') as log:
+    log.write(' '.join(args) + '\n')
+code = '400' if os.path.exists(os.path.join(DIR, 'push-fails')) else '200'
+if '-o' in args:
+    open(args[args.index('-o') + 1], 'w').write('{"error":"refused"}' if code == '400' else 'ok')
+if '-w' in args:
+    sys.stdout.write(code)
+sys.exit(0)

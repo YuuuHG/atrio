@@ -1,0 +1,86 @@
+#!/bin/bash
+# atrio-update and atrio-setup: a signed release installs the web UI and the services of that
+# version; a release that is not signed by the release key, or a changed bundle, is refused.
+. "$(dirname "$0")/lib.sh"
+sandbox
+export ATRIO_ROOT="$SB/root" GNUPGHOME="$SB/gnupg"
+mkdir -p "$ATRIO_ROOT/etc/systemd/system" "$ATRIO_ROOT/usr/local/bin" "$GNUPGHOME" "$SB/rel" "$SB/build" "$ATRIO_WWW"
+chmod 700 "$GNUPGHOME"
+
+# A throwaway signing key, and a release 9.9.9 made like scripts/release.sh makes one
+gpg --batch --quiet --passphrase '' --quick-gen-key "Atrio test key" ed25519 sign never 2>/dev/null
+gpg --export > "$SB/key.gpg"
+cp "$SB/key.gpg" "$SB/scripts-key.gpg"
+echo '<html>Atrio</html>' > "$SB/build/index.html"
+echo '{"version":"9.9.9"}' > "$SB/build/atrio-version.json"
+tar -czf "$SB/rel/atrio.tar.gz" -C "$SB/build" .
+(cd "$SB/rel" && sha256sum atrio.tar.gz > atrio.tar.gz.sha256)
+mkdir "$SB/server" && cp "$SCRIPTS"/atrio-update "$SCRIPTS"/atrio-alerts "$SCRIPTS"/atrio-backup "$SCRIPTS"/atrio-setup "$SB/server/"
+cp "$SB/key.gpg" "$SB/server/atrio-release-key.gpg"
+tar -czf "$SB/rel/atrio-server.tar.gz" -C "$SB/server" .
+for file in atrio.tar.gz atrio-server.tar.gz; do gpg --batch --yes --detach-sign -o "$SB/rel/$file.sig" "$SB/rel/$file"; done
+export ATRIO_DOWNLOAD="file://$SB/rel" ATRIO_RELEASE_KEY="$SB/key.gpg"
+echo '<html>Atrio</html>' > "$ATRIO_WWW/index.html"
+echo '{"version":"0.1.16"}' > "$ATRIO_WWW/atrio-version.json"
+update() { bash "$SCRIPTS/atrio-update" "$@" >/dev/null 2>&1; }
+status() { sed -n 's/.*"message":"\([^"]*\)".*/\1/p' "$ATRIO_STATE/update-status.json"; }
+
+update
+check "the new web UI is installed" has "$ATRIO_WWW/atrio-version.json" 9.9.9
+check "with the services of the same release" test -x "$ATRIO_ROOT/usr/local/bin/atrio-backup"
+check "and their timers" test -f "$ATRIO_ROOT/etc/systemd/system/atrio-check-updates.timer"
+check "the release of the services is recorded" is "$(cat "$ATRIO_STATE/server-version")" 9.9.9
+check "the update is in the activity log" has "$ATRIO_STATE/activity.log" "atrio-update	ok		9.9.9"
+check "the status says it is installed" is "$(status)" "Atrio 9.9.9 installed"
+
+rm -rf "${ATRIO_ROOT:?}/usr/local/bin/"*
+update
+check "a second run finds it installed" is "$(status)" "Atrio 9.9.9 is already installed"
+check "and does not set the services up again" test ! -e "$ATRIO_ROOT/usr/local/bin/atrio-backup"
+
+# Services older than the web UI (an update whose services failed): they are brought up to date
+echo 9.9.8 > "$ATRIO_STATE/server-version"
+update
+check "services left behind are updated" test -x "$ATRIO_ROOT/usr/local/bin/atrio-backup"
+
+# A bundle changed after it was signed is refused, and the services stay as they are
+rm -rf "${ATRIO_ROOT:?}/usr/local/bin/"*
+echo 9.9.8 > "$ATRIO_STATE/server-version"
+cp "$SB/rel/atrio-server.tar.gz" "$SB/bundle.orig"
+echo x >> "$SB/rel/atrio-server.tar.gz"
+update
+check "a changed bundle of services is refused" is "$(status)" "Atrio 9.9.9 is installed, but the services on the server could not be updated"
+check "and installs nothing" test ! -e "$ATRIO_ROOT/usr/local/bin/atrio-backup"
+cp "$SB/bundle.orig" "$SB/rel/atrio-server.tar.gz"
+
+# A web UI that is not signed by the release key is never installed
+echo '{"version":"0.1.16"}' > "$ATRIO_WWW/atrio-version.json"
+mv "$SB/rel/atrio.tar.gz.sig" "$SB/sig.orig"
+update
+check "a release with no signature is refused" is "$(status)" "The release on GitHub is not signed by Atrio, so it was not installed"
+check "and the web UI stays as it was" has "$ATRIO_WWW/atrio-version.json" 0.1.16
+mv "$SB/sig.orig" "$SB/rel/atrio.tar.gz.sig"
+
+# Trying a checkout's services (install.sh with ATRIO_SOURCE): the updater keeps them
+rm -rf "${ATRIO_ROOT:?}/usr/local/bin/"* "$ATRIO_STATE/server-version"
+ATRIO_KEEP_SERVER=1 bash "$SCRIPTS/atrio-update" --force >/dev/null 2>&1
+check "with ATRIO_KEEP_SERVER only the web UI is installed" test ! -e "$ATRIO_ROOT/usr/local/bin/atrio-backup"
+
+# After a CasaOS update put its own UI back: Atrio comes back, the services are not touched
+echo '<html>CasaOS</html>' > "$ATRIO_WWW/index.html"
+ATRIO_RESTORE_DELAY=0 bash "$SCRIPTS/atrio-update" --restore >/dev/null 2>&1
+check "Atrio comes back after a CasaOS update" has "$ATRIO_WWW/index.html" Atrio
+check "and keeps that CasaOS UI for the uninstaller" has "$ATRIO_STATE/casaos-ui-original/index.html" CasaOS
+check "without touching the services" test ! -e "$ATRIO_ROOT/usr/local/bin/atrio-backup"
+
+# atrio-setup alone: every service and unit, from a folder with the release's scripts
+ATRIO_ROOT="$SB/root2" bash -c 'mkdir -p "$ATRIO_ROOT/etc/systemd/system" "$ATRIO_ROOT/usr/local/bin"; bash "$1" "$2"' _ "$SCRIPTS/atrio-setup" "$SB/server" >/dev/null 2>&1
+units=$(ls "$SB/root2/etc/systemd/system" | wc -l)
+check "atrio-setup writes all 14 units" is "$units" 14
+check "it enables the timers" has "$FAKE_DOCKER/calls.log" "systemctl enable --now atrio-check-updates.timer"
+check "the services are executable" is "$(stat -c %a "$SB/root2/usr/local/bin/atrio-update")" 755
+check "and the release key is in place" test -s "$SB/root2/usr/local/share/atrio/release-key.gpg"
+rm "$SB/server/atrio-backup"
+ATRIO_ROOT="$SB/root3" bash "$SCRIPTS/atrio-setup" "$SB/server" >/dev/null 2>&1
+check "atrio-setup refuses a folder with a service missing" test ! -e "$SB/root3/usr/local/bin/atrio-update"
+finish
