@@ -83,6 +83,8 @@ def matches(container, labels):
 def inspect_container(c, fmt, state):
     if '.Mounts' in fmt:
         return ''.join(m + '\n' for m in c['mounts'])
+    if fmt.startswith('{{.Id}}'):
+        return f"{c['id']} {c['project']}\n"
     if '.State.Pid' in fmt:
         return f"{c.get('pid', 0)} {c.get('mode', 'bridge')} {c['project']}\n"
     if '.State.OOMKilled' in fmt:

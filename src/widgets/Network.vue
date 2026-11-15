@@ -26,7 +26,8 @@
 				</div>
 			</div>
 			<!-- Header End -->
-			<div class="atrio-metrics">
+			<!-- Atrio: the numbers open the network detail too -->
+			<div :aria-label="$t('Network detail')" class="atrio-metrics atrio-network-open" role="button" tabindex="0" @click="$EventBus.$emit('atrio:open-network')" @keydown.enter.space.prevent="$EventBus.$emit('atrio:open-network')">
 				<div class="atrio-metric">
 					<div class="atrio-metric-value">
 						<span class="atrio-metric-label">Upload</span>
@@ -278,6 +279,15 @@ export default {
 				}
 			}
 		}
+	}
+}
+
+.atrio-network-open {
+	border-radius: 0.75rem;
+	cursor: pointer;
+
+	&:hover {
+		background: rgba(255, 255, 255, 0.04);
 	}
 }
 </style>

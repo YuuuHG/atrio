@@ -73,29 +73,44 @@ export async function loadAppUsage() {
 	if (!text) return []
 	const rows = text.split('\n').filter(Boolean).map((line) => line.split('\t'))
 	const last = Math.max(...rows.map((row) => Number(row[0]) || 0))
-	return rows.filter((row) => Number(row[0]) === last)
+	return rows.filter((row) => Number(row[0]) === last && !row[1].startsWith('svc:'))
 		.map(([, app, cpu, memory]) => ({ app, cpu: Number(cpu) || 0, memory: Number(memory) || 0 }))
 		.sort((a, b) => b.memory - a.memory)
 }
 
-/** Bytes received and sent by each app over the last 24 hours, from the 5-minute samples: [{ app, down, up }] */
-export async function loadAppTraffic() {
-	const text = await read(`${STATE}/history-apps.tsv`)
-	if (!text) return []
+/**
+ * Bytes received and sent over the last 24 hours, from the 5-minute samples: the apps, the server's
+ * services (svc:<unit>) and the whole server. { apps: [{ app, down, up }], services: [{ name, down, up }], server: { down, up } }
+ */
+export async function loadDayTraffic() {
+	const [apps, history] = await Promise.all([read(`${STATE}/history-apps.tsv`), read(`${STATE}/history.tsv`)])
 	const totals = new Map()
 	const last = new Map()
-	for (const line of text.split('\n').filter(Boolean)) {
-		const [time, app, , , down, up] = line.split('\t')
-		const seconds = last.has(app) ? Math.min(Number(time) - last.get(app), 900) : 300
-		last.set(app, Number(time))
-		if (down === '-') {
-			totals.set(app, { app, host: true })
-			continue
-		}
-		const total = totals.get(app) || { app, down: 0, up: 0 }
+	for (const line of (apps || '').split('\n').filter(Boolean)) {
+		const [time, name, , , down, up] = line.split('\t')
+		const seconds = last.has(name) ? Math.min(Number(time) - last.get(name), 900) : 300
+		last.set(name, Number(time))
+		const total = totals.get(name) || { down: 0, up: 0 }
 		total.down += (Number(down) || 0) * seconds
 		total.up += (Number(up) || 0) * seconds
-		totals.set(app, total)
+		totals.set(name, total)
 	}
-	return [...totals.values()]
+	const server = { down: 0, up: 0 }
+	const since = Date.now() / 1000 - 86400
+	let previous = null
+	for (const line of (history || '').split('\n').filter(Boolean)) {
+		const cells = line.split('\t')
+		const time = Number(cells[0])
+		if (time < since) continue
+		const seconds = previous ? Math.min(time - previous, 900) : 300
+		previous = time
+		server.down += (Number(cells[4]) || 0) * seconds
+		server.up += (Number(cells[5]) || 0) * seconds
+	}
+	const list = [...totals.entries()]
+	return {
+		apps: list.filter(([name]) => !name.startsWith('svc:')).map(([app, t]) => ({ app, ...t })),
+		services: list.filter(([name]) => name.startsWith('svc:')).map(([name, t]) => ({ name: name.slice(4), ...t })),
+		server,
+	}
 }

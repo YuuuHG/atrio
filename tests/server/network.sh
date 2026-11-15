@@ -25,7 +25,7 @@ apps_row() { awk -F'\t' -v app="$1" '$2 == app' "$ATRIO_STATE/history-apps.tsv" 
 
 alerts
 check "the first sample has no rate yet" is "$(apps_row web 5)" ""
-check "an app on the host's network has no counters" is "$(apps_row home 5)" "-"
+check "an app on the host's network has no rate in the first sample either" is "$(apps_row home 5)" ""
 dev 101 4000000 800000 > "$ATRIO_PROC/101/net/dev"
 sed -i "s/^apps_net=\([0-9]*\)/apps_net=$(( $(date +%s) - 300 ))/" "$ATRIO_STATE/alerts-memory"
 alerts
@@ -46,4 +46,47 @@ check "an app doing nothing now" is "$(net "next(a['down'] for a in d['apps'] if
 check "an app on the host's network is marked" is "$(net "next(a.get('host') for a in d['apps'] if a['app'] == 'home')")" True
 check "the whole server too" test "$(net "d['server']['down']")" -ge 400000
 check "the result can be read by the web UI" is "$(stat -c %a "$ATRIO_STATE/network.json")" 644
+
+# Apps on the host's network and the server's services, from their TCP connections
+mkdir -p "$ATRIO_PROC/201" "$ATRIO_PROC/202" "$ATRIO_PROC/203" "$ATRIO_PROC/204"
+echo "0::/system.slice/docker-$(printf 'h%.0s' {1..8}).scope" > "$ATRIO_PROC/201/cgroup"
+echo "0::/system.slice/smbd.service" > "$ATRIO_PROC/202/cgroup"
+echo "0::/system.slice/casaos-gateway.service" > "$ATRIO_PROC/203/cgroup"
+echo "0::/system.slice/docker.service" > "$ATRIO_PROC/204/cgroup"
+docker_state "state['containers'][2]['id'] = 'hhhhhhhh'"
+# sockets HOME_RX SMB_RX: a connection of Home Assistant, one of Samba, one of CasaOS, one of
+# Docker itself and one inside the server, as ss -tinpH prints them
+sockets() {
+	cat > "$FAKE_DOCKER/sockets" <<SS
+ESTAB 0 0 192.168.1.88:8123 192.168.1.7:51000 users:(("python3",pid=201,fd=30))
+	 cubic bytes_sent:500 bytes_acked:$3 bytes_received:$1 segs_out:3
+ESTAB 0 0 192.168.1.88:445 192.168.1.7:51001 users:(("smbd",pid=202,fd=33))
+	 cubic bytes_acked:100 bytes_received:$2 segs_out:3
+ESTAB 0 0 192.168.1.88:80 192.168.1.7:51002 users:(("casaos-gateway",pid=203,fd=9))
+	 cubic bytes_acked:7000 bytes_received:3000
+ESTAB 0 0 192.168.1.88:2375 192.168.1.7:51003 users:(("dockerd",pid=204,fd=9))
+	 cubic bytes_acked:9999999 bytes_received:9999999
+ESTAB 0 0 127.0.0.1:5000 127.0.0.1:51004 users:(("smbd",pid=202,fd=34))
+	 cubic bytes_acked:9999999 bytes_received:9999999
+SS
+}
+sockets 1000 2000 600
+( sleep 1; sockets 401000 2000 200600 ) &
+printf '%s\n' ACTION=network APP=atrio > "$ATRIO_STATE/backup-request"
+bash "$SCRIPTS/atrio-backup" >/dev/null 2>&1
+wait
+check "an app on the host's network gets its own numbers" test "$(net "next(a['down'] for a in d['apps'] if a['app'] == 'home')")" -ge 150000
+check "the server's services are listed" is "$(net "sorted(s['name'] for s in d['services'])")" "['casaos', 'smbd']"
+check "Docker's own connections are left out" is "$(net "[s for s in d['services'] if 'docker' in s['name']]")" "[]"
+check "and so are connections inside the server" test "$(net "next(s['down'] for s in d['services'] if s['name'] == 'smbd')")" -lt 1000
+
+# Every 5 minutes too, for the last 24 hours
+sockets 401000 2000 200600
+alerts
+sockets 701000 302000 200600
+sed -i "s/^sockets_time=.*/sockets_time=$(( $(date +%s) - 300 ))/" "$ATRIO_STATE/alerts-memory"
+alerts
+check "the history has the host-network app's rate" is "$(apps_row home 5)" 1000
+check "and the services', on their own lines" is "$(apps_row svc:smbd 5)" 1000
+check "the connections are kept root-only" is "$(stat -c %a "$ATRIO_STATE/net-sockets")" 600
 finish

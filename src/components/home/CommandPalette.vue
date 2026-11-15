@@ -21,6 +21,7 @@ export default {
 				{ id: 'store', label: 'App Store', hint: this.$t('Install new apps'), icon: 'app-store-outline', run: () => this.homeShowAppStore() },
 				{ id: 'settings', label: this.$t('Settings'), hint: this.$t('Language, wallpaper, search, updates and more'), icon: 'control-outline', run: () => this.$EventBus.$emit('atrio:open-settings') },
 				{ id: 'wallpaper', label: this.$t('Wallpaper'), hint: this.$t('Change the wallpaper'), icon: 'wallpaper-outline', run: () => this.$EventBus.$emit(events.SHOW_CHANGE_WALLPAPER_MODAL) },
+				{ id: 'network', label: this.$t('Network detail'), hint: this.$t('Which apps and services use the network'), icon: 'swap-vertical', pack: 'mdi', run: () => this.$EventBus.$emit('atrio:open-network') },
 				{ id: 'activity', label: this.$t('Activity'), hint: this.$t('Installs, updates, backups and restores'), icon: 'history', pack: 'mdi', run: () => this.$EventBus.$emit('atrio:open-activity') },
 			].map((item) => ({ ...item, group: this.$t('System') }))
 			const apps = this.apps.flatMap((app) => {

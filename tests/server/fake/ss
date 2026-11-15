@@ -1,0 +1,3 @@
+#!/bin/sh
+# A stand-in for ss -tinpH in the tests: the connections are in $FAKE_DOCKER/sockets, as ss prints them
+cat "$FAKE_DOCKER/sockets" 2>/dev/null

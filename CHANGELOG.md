@@ -10,10 +10,11 @@ What changes in each Atrio release. The section for a version is also the text o
   and the temperatures of the processor and the hottest disk, with the values at any time on hover and gaps where
   the server was off. Below them, how much memory and CPU each app uses now. The server keeps a point every 5
   minutes for a week, also with push alerts off, counting only the real network cards (not Docker's bridges).
-- **Network detail**, from a new button in the Network Status widget: which apps are receiving and sending data now,
-  measured on the server every few seconds while it is open, and how much each one moved in the last 24 hours. The
-  counts are exact, read from each app's own network. Apps on the server's own network, like Home Assistant, have no
-  counter of their own: they are named and counted with the rest of the server.
+- **Network detail**, from the numbers of the Network Status widget, its new button or the command palette: which
+  apps and which of the server's services (Samba, SSH, CasaOS…) are receiving and sending data, now (measured every
+  few seconds while it is open) or over the last 24 hours. The totals on top, a bar with each app's share, and a list
+  with each app's own icon. Apps with their own network are counted exactly; apps on the server's network, like
+  Home Assistant, and the services are counted from their TCP connections.
 
 ## 0.1.20 — 2026-11-15
 
