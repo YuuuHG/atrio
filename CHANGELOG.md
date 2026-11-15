@@ -11,6 +11,11 @@ What changes in each Atrio release. The section for a version is also the text o
   a red label on its tile, an entry in Activity and, if you want, a push alert, and another one when it works again.
   It counts once it is seen twice in a row, so restarts and updates are not taken for a problem, and an app stopped
   by you is not one. The alert can be turned off in the push alert settings, under "Apps that stop working".
+- **Disk health**, in the hardware panel: every hour the server reads each disk's SMART data, without waking disks
+  that sleep, and shows its temperature, hours powered on, wear and the counters that matter, with a verdict (Good,
+  Keep an eye on it, Replace soon) and what it is based on: sectors waiting to be replaced, errors the disk could
+  not correct, reallocated sectors, wear, cable errors, heat, age. A verdict that gets worse goes to Activity and to
+  push alerts, under "Disk health problems", instead of waiting for the disk's own pass or fail.
 
 **Fixed**
 

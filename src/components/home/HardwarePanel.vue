@@ -6,6 +6,23 @@ import { restoreFocus, trapTab } from '@/plugins/focusTrap'
 import { renderSize } from '@/mixins/file_utils'
 
 const POLL_MS = 3000
+// SMART data of the disks, read every hour by atrio-alerts on the server
+const DISKS = '/var/lib/casaos/atrio/disks.json'
+const VERDICTS = { good: 'Good', watch: 'Keep an eye on it', replace: 'Replace soon', unknown: 'No SMART data' }
+const REASONS = {
+	'failed': 'The disk says its own health check failed.',
+	'pending': 'Some sectors could not be read and wait to be replaced: this often comes before a failure.',
+	'uncorrectable': 'Errors the disk could not correct.',
+	'media-errors': 'Data integrity errors.',
+	'critical-warning': 'The disk raised a critical warning.',
+	'worn-out': 'Its rated write endurance is used up.',
+	'reallocated-many': 'Many sectors were replaced by spare ones.',
+	'reallocated': 'Some sectors were replaced by spare ones: keep an eye on whether the number grows.',
+	'wearing': 'Most of its rated write endurance is used.',
+	'cable': 'Transfer errors between the disk and the computer: often a loose or worn cable.',
+	'hot': 'It runs hot.',
+	'old': 'Over 50,000 hours powered on.',
+}
 // Sections in the order they appear, each shown only when the machine has such sensors
 const SECTIONS = [
 	{ kind: 'temp', title: 'Temperatures', name: 'Temperature' },
@@ -35,6 +52,8 @@ export default {
 			groups: [],
 			live: null,
 			unit: '°C',
+			// null while loading, false without the service on the server
+			disks: null,
 		}
 	},
 	computed: {
@@ -71,6 +90,7 @@ export default {
 			this.open = true
 			this.unit = storedUnit()
 			this.$nextTick(() => this.$refs.sheet?.focus())
+			this.loadDisks()
 			// Machine details and the sensor list are read once per page load
 			if (!this.info) {
 				this.loading = true
@@ -102,6 +122,41 @@ export default {
 			finally {
 				this.polling = false
 			}
+		},
+		async loadDisks() {
+			try {
+				const res = await this.$api.file.getContent(DISKS)
+				this.disks = res.data.success === 200 ? JSON.parse(res.data.data).disks || [] : false
+			}
+			catch (e) {
+				this.disks = false
+			}
+		},
+		verdict(disk) {
+			return this.$t(VERDICTS[disk.verdict] || VERDICTS.unknown)
+		},
+		verdictLevel(disk) {
+			return { good: 'is-ok', watch: 'is-warm', replace: 'is-hot' }[disk.verdict] || ''
+		},
+		reasons(disk) {
+			return (disk.reasons || '').split(' ').filter((reason) => REASONS[reason]).map((reason) => this.$t(REASONS[reason]))
+		},
+		kind(disk) {
+			return { nvme: 'NVMe SSD', ssd: 'SSD', hdd: this.$t('Hard disk') }[disk.kind] || ''
+		},
+		powerOn(hours) {
+			const days = Math.floor(Number(hours) / 24)
+			if (days < 60) return this.$t('{n} days', { n: days })
+			const years = Math.floor(days / 365)
+			const months = Math.floor((days % 365) / 30)
+			return years ? this.$t('{years} y, {months} months', { years, months }) : this.$t('{n} months', { n: months })
+		},
+		// The counters that matter, only when they are not zero
+		counters(disk) {
+			return [
+				['reallocated', 'Replaced sectors'], ['pending', 'Sectors waiting'], ['unc', 'Uncorrectable errors'],
+				['media', 'Integrity errors'], ['crc', 'Cable errors'],
+			].filter(([key]) => Number(disk[key]) > 0).map(([key, label]) => ({ key, label: this.$t(label), value: disk[key] }))
 		},
 		toggleUnit() {
 			this.unit = this.unit === '°C' ? '°F' : '°C'
@@ -244,6 +299,41 @@ export default {
 							</p>
 						</section>
 
+						<section v-if="disks?.length">
+							<h3>{{ $t('Disks') }}</h3>
+							<div v-for="disk in disks" :key="disk.device" class="atrio-hardware-disk">
+								<div class="atrio-hardware-disk-head">
+									<span :class="verdictLevel(disk)" class="atrio-hardware-dot" />
+									<strong :title="disk.serial ? `${disk.model} · ${disk.serial}` : disk.model">{{ disk.model || disk.device }}</strong>
+									<span :class="verdictLevel(disk)" class="atrio-hardware-verdict">{{ verdict(disk) }}</span>
+								</div>
+								<dl class="atrio-sheet-info">
+									<dt>{{ $t('Device') }}</dt>
+									<dd>{{ [disk.device, kind(disk), disk.size ? renderSize(Number(disk.size)) : ''].filter(Boolean).join(' · ') }}</dd>
+									<template v-if="disk.temp">
+										<dt>{{ $t('Temperature') }}</dt>
+										<dd>{{ temperature(Number(disk.temp)) }}</dd>
+									</template>
+									<template v-if="disk.hours">
+										<dt>{{ $t('Powered on') }}</dt>
+										<dd>{{ powerOn(disk.hours) }}</dd>
+									</template>
+									<template v-if="disk.used !== '' && disk.used !== undefined">
+										<dt>{{ $t('Wear') }}</dt>
+										<dd>{{ disk.used }}%</dd>
+									</template>
+									<template v-for="counter in counters(disk)" :key="counter.key">
+										<dt>{{ counter.label }}</dt>
+										<dd>{{ counter.value }}</dd>
+									</template>
+								</dl>
+								<ul v-if="reasons(disk).length" class="atrio-hardware-reasons">
+									<li v-for="reason in reasons(disk)" :key="reason">{{ reason }}</li>
+								</ul>
+							</div>
+							<p class="atrio-hardware-muted">{{ $t('Read from SMART every hour, without waking disks that sleep. A disk that gets worse sends a push alert.') }}</p>
+						</section>
+
 						<section v-for="section in sections" :key="section.kind">
 							<div class="atrio-hardware-section-head">
 								<h3>{{ $t(section.title) }}</h3>
@@ -345,6 +435,63 @@ export default {
 .atrio-hardware-value {
 	font-variant-numeric: tabular-nums;
 	font-weight: 600;
+}
+
+.atrio-hardware-disk {
+	padding: 0.75rem 0;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+
+	.atrio-sheet-info {
+		margin-top: 0.5rem;
+	}
+}
+
+.atrio-hardware-disk-head {
+	display: flex;
+	gap: 0.5rem;
+	align-items: center;
+
+	strong {
+		min-width: 0;
+		overflow: hidden;
+		color: var(--atrio-text);
+		font-size: 0.9375rem;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+}
+
+.atrio-hardware-verdict {
+	flex: none;
+	margin-left: auto;
+	padding: 0.125rem 0.5rem;
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.08);
+	color: var(--atrio-text-soft);
+	font-size: 0.75rem;
+
+	&.is-ok {
+		background: rgba(74, 222, 128, 0.14);
+		color: #bbf7d0;
+	}
+
+	&.is-warm {
+		background: rgba(251, 191, 36, 0.16);
+		color: #fde68a;
+	}
+
+	&.is-hot {
+		background: rgba(248, 113, 113, 0.18);
+		color: #fecaca;
+	}
+}
+
+.atrio-hardware-reasons {
+	margin: 0.5rem 0 0;
+	padding-left: 1.125rem;
+	color: var(--atrio-text-soft);
+	font-size: 0.8125rem;
+	list-style: disc;
 }
 
 .atrio-hardware-dot {

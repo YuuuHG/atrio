@@ -1,0 +1,16 @@
+smartctl 7.4 2023-08-01 r5530 [x86_64-linux] (local build)
+
+=== START OF INFORMATION SECTION ===
+Device Model:     Samsung SSD 870 EVO 500GB
+Serial Number:    S6PWNX0R123456
+User Capacity:    500,107,862,016 bytes [500 GB]
+Rotation Rate:    Solid State Device
+
+SMART overall-health self-assessment test result: PASSED
+
+ID# ATTRIBUTE_NAME          FLAG     VALUE WORST THRESH TYPE      UPDATED  WHEN_FAILED RAW_VALUE
+  5 Reallocated_Sector_Ct   0x0033   100   100   010    Pre-fail  Always       -       0
+  9 Power_On_Hours          0x0032   097   097   000    Old_age   Always       -       12034
+177 Wear_Leveling_Count     0x0013   095   095   000    Pre-fail  Always       -       52
+190 Airflow_Temperature_Cel 0x0032   067   052   000    Old_age   Always       -       33
+199 UDMA_CRC_Error_Count    0x003e   100   100   000    Old_age   Always       -       0

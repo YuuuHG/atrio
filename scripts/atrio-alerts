@@ -96,6 +96,8 @@ text() {
 			disk_title) echo "Disco quasi pieno" ;;
 			disk_body) echo "$1 è pieno al $2%. Libera spazio perché app e CasaOS continuino a funzionare." ;;
 			health_title) echo "Problema di salute di un disco" ;;
+			disk_watch) echo "Il disco $1 mostra i primi segni di problemi: tienilo d'occhio e controlla di avere i backup." ;;
+			disk_replace) echo "Il disco $1 rischia di guastarsi presto: fai subito un backup dei dati e pensa a sostituirlo." ;;
 			health_body) echo "Il disco $1 segnala un problema (SMART). Fai un backup dei dati e controlla il disco." ;;
 			temp_title) echo "Processore caldo" ;;
 			temp_body) echo "Il processore è a $1 °C. Controlla il raffreddamento e cosa sta girando." ;;
@@ -124,6 +126,8 @@ text() {
 			disk_title) echo "Disk almost full" ;;
 			disk_body) echo "$1 is $2% full. Free some space to keep apps and CasaOS working." ;;
 			health_title) echo "Disk health problem" ;;
+			disk_watch) echo "Disk $1 shows the first signs of trouble: keep an eye on it and make sure you have backups." ;;
+			disk_replace) echo "Disk $1 may fail soon: back up its data now and plan to replace it." ;;
 			health_body) echo "Disk $1 reports a problem (SMART). Back up your data and check the disk." ;;
 			temp_title) echo "Processor running hot" ;;
 			temp_body) echo "The processor is at $1 °C. Check the cooling and what is running." ;;
@@ -218,19 +222,148 @@ check_disks() {
 		awk 'NR > 1 && $6 !~ "^/(boot|snap)" { print $5, $6 }')
 }
 
-check_health() {
+# --- Disk health --------------------------------------------------------------------------------
+
+DISKS_JSON="$STATE/disks.json"
+DISKS_TSV="$STATE/disks.tsv"
+
+# The SMART data of one disk as KEY=value lines, from smartctl's text output (ATA, SAT and NVMe)
+smart_values() {
+	awk '
+		function num(s) { gsub(/,/, "", s); match(s, /^[0-9]+/); return RLENGTH > 0 ? substr(s, 1, RLENGTH) : "" }
+		function after(s) { sub(/^[^:]*:[ \t]*/, "", s); return s }
+		/^(Device Model|Model Number):/ { model = after($0) }
+		/^Model Family:/ { family = after($0) }
+		/^Serial Number:/ { serial = after($0) }
+		/^(User Capacity|Total NVM Capacity|Namespace 1 Size\/Capacity):/ && !size { size = num(after($0)) }
+		/^Rotation Rate:/ { kind = (after($0) ~ /Solid State/) ? "ssd" : "hdd" }
+		/^SMART overall-health self-assessment test result:/ { health = after($0) }
+		/^SMART Health Status:/ { health = after($0) }
+		/^Critical Warning:/ { crit = after($0) }
+		/^Temperature:/ { temp = num(after($0)) }
+		/^Percentage Used:/ { used = num(after($0)) }
+		/^Power On Hours:/ { hours = num(after($0)) }
+		/^Media and Data Integrity Errors:/ { media = num(after($0)) }
+		/^NVMe Version:|^Model Number:/ { kind = "nvme" }
+		# ATA attributes: ID NAME FLAG VALUE WORST THRESH TYPE UPDATED WHEN_FAILED RAW
+		$1 ~ /^[0-9]+$/ && NF >= 10 {
+			raw = num($10)
+			if ($1 == 5) realloc = raw
+			else if ($1 == 9) hours = raw
+			else if ($1 == 187 && unc == "") unc = raw
+			else if ($1 == 188) timeout = raw
+			else if ($1 == 194 || ($1 == 190 && temp == "")) temp = raw
+			else if ($1 == 196 && realloc == "") realloc = raw
+			else if ($1 == 197) pending = raw
+			else if ($1 == 198) unc = raw
+			else if ($1 == 199) crc = raw
+			else if ($1 == 177 || $1 == 231 || $1 == 233) { if (used == "") used = 100 - num($4) }
+			else if ($1 == 202) { if (used == "") used = raw }
+		}
+		END {
+			if (model == "") model = family
+			printf "MODEL=%s\nSERIAL=%s\nSIZE=%s\nKIND=%s\nHEALTH=%s\nCRIT=%s\nTEMP=%s\nUSED=%s\nHOURS=%s\n", model, serial, size, kind, health, crit, temp, used, hours
+			printf "MEDIA=%s\nREALLOC=%s\nPENDING=%s\nUNC=%s\nCRC=%s\n", media, realloc, pending, unc, crc
+		}'
+}
+
+smart_get() {
+	printf '%s\n' "$1" | sed -n "s/^$2=//p" | head -n 1
+}
+
+# good, watch or replace, then the reasons: the signs that, in Backblaze's statistics of their
+# drives, go with a disk that fails soon (pending, uncorrectable and reallocated sectors), wear,
+# and what is worth a look (cable errors, heat, age)
+smart_verdict() {
+	local v="$1" verdict=good reasons="" n
+	add() { reasons="$reasons $1"; }
+	n=$(smart_get "$v" HEALTH)
+	[[ "$n" =~ FAIL ]] && { verdict=replace; add failed; }
+	n=$(smart_get "$v" PENDING); [ "${n:-0}" -gt 0 ] && { verdict=replace; add pending; }
+	n=$(smart_get "$v" UNC); [ "${n:-0}" -gt 0 ] && { verdict=replace; add uncorrectable; }
+	n=$(smart_get "$v" MEDIA); [ "${n:-0}" -gt 0 ] && { verdict=replace; add media-errors; }
+	n=$(smart_get "$v" CRIT); [[ "$n" =~ ^0x0*[1-9a-fA-F] ]] && { verdict=replace; add critical-warning; }
+	n=$(smart_get "$v" USED); [ "${n:-0}" -ge 100 ] && { verdict=replace; add worn-out; }
+	n=$(smart_get "$v" REALLOC)
+	if [ "${n:-0}" -ge 100 ]; then verdict=replace; add reallocated-many
+	elif [ "${n:-0}" -gt 0 ]; then [ "$verdict" = good ] && verdict=watch; add reallocated
+	fi
+	n=$(smart_get "$v" USED); [ "${n:-0}" -ge 80 ] && [ "${n:-0}" -lt 100 ] && { [ "$verdict" = good ] && verdict=watch; add wearing; }
+	n=$(smart_get "$v" CRC); [ "${n:-0}" -gt 0 ] && { [ "$verdict" = good ] && verdict=watch; add cable; }
+	local limit=55
+	[ "$(smart_get "$v" KIND)" = nvme ] && limit=70
+	n=$(smart_get "$v" TEMP); [ "${n:-0}" -ge "$limit" ] && { [ "$verdict" = good ] && verdict=watch; add hot; }
+	[ "$(smart_get "$v" KIND)" = hdd ] && n=$(smart_get "$v" HOURS) && [ "${n:-0}" -ge 50000 ] && { [ "$verdict" = good ] && verdict=watch; add old; }
+	[ -z "$(smart_get "$v" HEALTH)" ] && [ -z "$(smart_get "$v" TEMP)" ] && [ -z "$(smart_get "$v" HOURS)" ] && verdict=unknown
+	printf '%s\t%s' "$verdict" "${reasons# }"
+}
+
+# Every hour: each disk smartctl can see, without waking one that sleeps (it keeps its last data).
+# A verdict that gets worse is logged and sent; disks.json is what the hardware panel shows.
+check_disk_health() {
 	command -v smartctl >/dev/null || return 0
-	local disk
-	for disk in $(lsblk -dn -o NAME,TYPE 2>/dev/null | awk '$2 == "disk" { print $1 }'); do
-		local output key="health_$disk"
-		output=$(smartctl -H "/dev/$disk" 2>/dev/null) || true
-		if printf '%s' "$output" | grep -Eq 'FAILED|FAILING'; then
-			[ "$(memory_get "$key")" = 1 ] && continue
-			send "$(text health_title)" "$(text health_body "/dev/$disk")" 5 "rotating_light" && memory_set "$key" 1
-		elif printf '%s' "$output" | grep -Eq 'PASSED|OK'; then
-			memory_set "$key" 0
+	local now last device type out code values verdict reasons serial key before rank_new rank_old line
+	now=$(date +%s)
+	last=$(memory_get disks_checked)
+	[ -n "$last" ] && [ $((now - last)) -lt 3600 ] && [ -f "$DISKS_JSON" ] && return 0
+	memory_set disks_checked "$now"
+	touch "$DISKS_TSV"
+	while read -r device _ type _; do
+		[[ "$device" =~ ^/dev/[A-Za-z0-9/_-]+$ ]] && [[ "$type" =~ ^[A-Za-z0-9,_+-]+$ ]] || continue
+		# In C: in other languages smartctl writes 1.234 for 1,234 and the numbers would be cut
+		out=$(LC_ALL=C timeout 60 smartctl -n standby -i -H -A -d "$type" "$device" 2>/dev/null)
+		code=$?
+		# Asleep: the data of the last check stay
+		[ $((code & 2)) -ne 0 ] && printf '%s' "$out" | grep -qi standby && continue
+		values=$(printf '%s\n' "$out" | smart_values)
+		line=$(smart_verdict "$values")
+		verdict="${line%%$'\t'*}"
+		reasons="${line#*$'\t'}"
+		serial=$(smart_get "$values" SERIAL)
+		key="disk_verdict_$(printf '%s' "${serial:-$device}" | tr -c 'A-Za-z0-9' '_')"
+		before=$(memory_get "$key")
+		memory_set "$key" "$verdict"
+		rank_new=$(case "$verdict" in watch) echo 1 ;; replace) echo 2 ;; *) echo 0 ;; esac)
+		rank_old=$(case "$before" in watch) echo 1 ;; replace) echo 2 ;; *) echo 0 ;; esac)
+		if [ -n "$before" ] && [ "$rank_new" -gt "$rank_old" ]; then
+			log_activity disk-health error "" "$verdict $device $reasons"
+			if [ "${SEND_HEALTH:-1}" = 1 ]; then
+				send "$(text health_title)" "$(text "disk_$verdict" "$device ($(smart_get "$values" MODEL))")" "$([ "$verdict" = replace ] && echo 5 || echo 4)" "rotating_light"
+			fi
 		fi
-	done
+		{
+			awk -F'\t' -v d="$device" '$1 != d' "$DISKS_TSV"
+			# "-" for no reasons: read splits on tabs and would skip an empty field
+			printf '%s\t%s\t%s\t%s\t%s\n' "$device" "$verdict" "${reasons:--}" "$(date -Iseconds)" "$(printf '%s' "$values" | tr '\n' '|')"
+		} > "$DISKS_TSV.tmp"
+		mv "$DISKS_TSV.tmp" "$DISKS_TSV"
+	done < <(LC_ALL=C timeout 60 smartctl --scan-open 2>/dev/null | grep -v '^#')
+	write_disks
+}
+
+write_disks() {
+	local device verdict reasons checked values first=1 field key value
+	{
+		printf '{"time":"%s","disks":[' "$(date -Iseconds)"
+		while IFS=$'\t' read -r device verdict reasons checked values; do
+			[ -n "$device" ] || continue
+			[ "$first" = 1 ] || printf ','
+			first=0
+			[ "$reasons" = - ] && reasons=""
+			printf '{"device":"%s","verdict":"%s","reasons":"%s","checked":"%s"' "$device" "$verdict" "$reasons" "$checked"
+			IFS='|' read -ra fields <<< "$values"
+			for field in "${fields[@]}"; do
+				key="${field%%=*}"
+				value="${field#*=}"
+				[[ "$key" =~ ^[A-Z]+$ ]] || continue
+				printf ',"%s":"%s"' "$(printf '%s' "$key" | tr 'A-Z' 'a-z')" "$(json_text "$value")"
+			done
+			printf '}'
+		done < "$DISKS_TSV"
+		printf ']}\n'
+	} > "$DISKS_JSON.tmp"
+	chmod 644 "$DISKS_JSON.tmp"
+	mv "$DISKS_JSON.tmp" "$DISKS_JSON"
 }
 
 cpu_temperature() {
@@ -530,14 +663,15 @@ if [ "$ENABLED" != 1 ] || ! configured; then
 	# Keep the app list current, so turning alerts on later does not announce every app or update
 	SEND_APPS=0 check_apps
 	SEND_APPS=0 check_app_updates
-	# The tiles show how apps are doing also with alerts off
+	# The tiles show how apps are doing, and the hardware panel the disks, also with alerts off
 	SEND_DOWN=0 check_app_health
+	SEND_HEALTH=0 check_disk_health
 	write_status disabled ""
 	exit 0
 fi
 
 [ "$DISK" = 1 ] && check_disks
-[ "$HEALTH" = 1 ] && check_health
+if [ "$HEALTH" = 1 ]; then check_disk_health; else SEND_HEALTH=0 check_disk_health; fi
 [ "$TEMP" = 1 ] && check_temperature
 if [ "$APPS_CHANGES" = 1 ]; then check_apps; else SEND_APPS=0 check_apps; fi
 if [ "$APP_UPDATES" = 1 ]; then check_app_updates; else SEND_APPS=0 check_app_updates; fi
