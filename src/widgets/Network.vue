@@ -8,6 +8,9 @@
 				<div class="widget-title is-flex-grow-1">
 					{{ $t('Network Status') }}
 				</div>
+				<button :aria-label="$t('Network detail')" :title="$t('Network detail')" class="widget-icon-button atrio-widget-button is-flex-shrink-0 mr-1" type="button" @click="$EventBus.$emit('atrio:open-network')">
+					<b-icon custom-size="mdi-18px" icon="swap-vertical" pack="mdi"></b-icon>
+				</button>
 				<div class="is-flex-shrink-0">
 					<b-dropdown v-if="initNetwork.length > 0" v-model="networkId" :mobile-modal="false" animation="fade1"
 						aria-role="list" class="netowrk-dropdown" position="is-bottom-left">

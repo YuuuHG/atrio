@@ -77,3 +77,25 @@ export async function loadAppUsage() {
 		.map(([, app, cpu, memory]) => ({ app, cpu: Number(cpu) || 0, memory: Number(memory) || 0 }))
 		.sort((a, b) => b.memory - a.memory)
 }
+
+/** Bytes received and sent by each app over the last 24 hours, from the 5-minute samples: [{ app, down, up }] */
+export async function loadAppTraffic() {
+	const text = await read(`${STATE}/history-apps.tsv`)
+	if (!text) return []
+	const totals = new Map()
+	const last = new Map()
+	for (const line of text.split('\n').filter(Boolean)) {
+		const [time, app, , , down, up] = line.split('\t')
+		const seconds = last.has(app) ? Math.min(Number(time) - last.get(app), 900) : 300
+		last.set(app, Number(time))
+		if (down === '-') {
+			totals.set(app, { app, host: true })
+			continue
+		}
+		const total = totals.get(app) || { app, down: 0, up: 0 }
+		total.down += (Number(down) || 0) * seconds
+		total.up += (Number(up) || 0) * seconds
+		totals.set(app, total)
+	}
+	return [...totals.values()]
+}

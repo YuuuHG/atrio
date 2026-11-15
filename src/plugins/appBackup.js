@@ -176,6 +176,12 @@ export async function removeImages(ids = []) {
 	return { removed: removed || 0, freed: freed || 0 }
 }
 
+/** The network now, measured on the server over a few seconds: { time, server: { down, up }, apps: [{ app, down, up } | { app, host }] } */
+export async function measureNetwork() {
+	await run({ ACTION: 'network', APP: 'atrio' })
+	return readJson(`${STATE}/network.json`)
+}
+
 /** The key that encrypts and signs this server's backups, created with the first backup. */
 export async function backupKey() {
 	return ((await read(`${STATE}/backup.key`)) || '').trim()

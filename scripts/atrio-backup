@@ -173,7 +173,7 @@ read_request() {
 	done < "$REQUEST"
 	rm -f "$REQUEST"
 	case "$ACTION" in
-		scan|backup|restore|delete|destination|forget|schedule|export-settings|import-settings|images|remove-images|check-updates|update-app|ignore-updates) ;;
+		scan|backup|restore|delete|destination|forget|schedule|export-settings|import-settings|images|remove-images|check-updates|update-app|ignore-updates|network) ;;
 		*) ACTION=""; APP=""; ID=""; fail "Unknown request" ;;
 	esac
 	if ! [[ "$APP" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]]; then
@@ -1599,4 +1599,11 @@ case "$ACTION" in
 		do_update_app
 		;;
 	ignore-updates) do_ignore_updates ;;
+	network)
+		# Measured by atrio-alerts, which reads the same counters for the history
+		write_status running measuring
+		"$(dirname "$0")/atrio-alerts" --network >/dev/null 2>&1 || bash "$(dirname "$0")/atrio-alerts" --network >/dev/null 2>&1
+		[ -s "$STATE/network.json" ] || fail "The network could not be measured"
+		write_status done "" ""
+		;;
 esac

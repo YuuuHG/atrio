@@ -968,5 +968,16 @@
   "No data yet: the server adds a point every 5 minutes.": "No data yet: the server adds a point every 5 minutes.",
   "min {min}, average {average}, max {max}": "min {min}, average {average}, max {max}",
   "Received": "Received",
-  "Sent": "Sent"
+  "Sent": "Sent",
+  "Network detail": "Network detail",
+  "Which apps are receiving and sending data": "Which apps are receiving and sending data",
+  "Now": "Now",
+  "Measuring…": "Measuring…",
+  "The server and apps on its network": "The server and apps on its network",
+  "The server itself": "The server itself",
+  "{apps} use the network of the server itself, so their traffic is in the line above with the rest of the server.": "{apps} use the network of the server itself, so their traffic is in the line above with the rest of the server.",
+  "Measured on the server every few seconds while this is open. Traffic between apps, for example through a reverse proxy, counts for both.": "Measured on the server every few seconds while this is open. Traffic between apps, for example through a reverse proxy, counts for both.",
+  "Last 24 hours": "Last 24 hours",
+  "This needs the service on the server. Run the install command on the server.": "This needs the service on the server. Run the install command on the server.",
+  "The network could not be measured": "The network could not be measured"
 }
