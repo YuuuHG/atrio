@@ -162,6 +162,30 @@ export async function startUpdate() {
 	pollTimer = setTimeout(poll, POLL_MS)
 }
 
+// The services on the server (updater, push alerts, backups) of the version they came with: the updater
+// writes it since 0.1.17, so older installs, which update the web UI only, have none. Then the install
+// command has to run once more, and the web UI says so.
+export const INSTALL_COMMAND = 'curl -fsSL https://raw.githubusercontent.com/peppeaiello/atrio/main/scripts/install.sh | sudo bash'
+export const services = reactive({ outdated: false, checked: false })
+
+export async function checkServices() {
+	if (import.meta.env.DEV || services.checked) return services.outdated
+	try {
+		const res = await api.file.getContent(`${STATE}/server-version`)
+		const version = res.data.success === 200 ? String(res.data.data ?? '').trim() : ''
+		services.outdated = !version || isNewer(CURRENT, version)
+		services.checked = true
+	}
+	catch (e) {
+		// The server answered: no such file. Without an answer, asked again on the next page load
+		if (e.response) {
+			services.outdated = true
+			services.checked = true
+		}
+	}
+	return services.outdated
+}
+
 export function dismissUpdate() {
 	clearTimeout(pollTimer)
 	release.run = null

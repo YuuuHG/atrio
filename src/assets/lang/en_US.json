@@ -904,5 +904,8 @@
   "{title} did not start with the new version, so Atrio put it back as it was before the update.": "{title} did not start with the new version, so Atrio put it back as it was before the update.",
   "The new version did not start, so the app went back to how it was before the update": "The new version did not start, so the app went back to how it was before the update",
   "The App Store's version does not match this app, it was not changed": "The App Store's version does not match this app, it was not changed",
-  "Going back": "Going back"
+  "Going back": "Going back",
+  "The services on the server (updates, backups, push alerts) are older than this version, so some features do not work yet. Run this command once on the server; after that, updates bring them too:": "The services on the server (updates, backups, push alerts) are older than this version, so some features do not work yet. Run this command once on the server; after that, updates bring them too:",
+  "The services on the server need the install command once more": "The services on the server need the install command once more",
+  "They are older than Atrio {version}, so backups, push alerts and safe updates may not work. Run this on the server, once: {command}": "They are older than Atrio {version}, so backups, push alerts and safe updates may not work. Run this on the server, once: {command}"
 }

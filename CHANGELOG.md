@@ -2,7 +2,24 @@
 
 What changes in each Atrio release. The section for a version is also the text of its GitHub release.
 
+## 0.1.19 — unreleased
+
+**New**
+
+- **Atrio says when the services on the server are older than the web UI.** Installs made before 0.1.17 update only
+  the web UI from the settings, so backups, push alerts and safe updates keep running an older service, or none. The
+  Atrio row in the settings and a notification now show the install command to run once; after that, updates bring
+  the services too.
+
 ## 0.1.18 — 2026-11-13
+
+**If you installed Atrio before 0.1.17, run the install command once more**, even after updating from the settings:
+until 0.1.17, updates from the settings changed only the web UI, so the new backups, safe updates and activity log
+need the services on the server to be updated once. After that, updates from the settings bring them too.
+
+```
+curl -fsSL https://raw.githubusercontent.com/peppeaiello/atrio/main/scripts/install.sh | sudo bash
+```
 
 **New**
 

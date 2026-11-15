@@ -2,7 +2,7 @@
 // Collects notifications from the message bus and the update checks, and shows them in a side
 // panel opened with `$EventBus.$emit('atrio:open-notifications')` (the bell in the header).
 import { ice_i18n } from '@/mixins/base/common-i18n'
-import { checkLatest, release, updateAvailable } from '@/plugins/atrioRelease'
+import { CURRENT, INSTALL_COMMAND, checkLatest, checkServices, release, updateAvailable } from '@/plugins/atrioRelease'
 import { restoreFocus, trapTab } from '@/plugins/focusTrap'
 import { clearNotifications, hasNotification, markAllRead, notifications, notify, removeNotification } from '@/plugins/notifications'
 import ActivityList from '@/components/home/ActivityList.vue'
@@ -67,6 +67,7 @@ export default {
 		window.addEventListener('keydown', this.onKey)
 		checkLatest()
 		this.checkCasaOS()
+		this.checkServices()
 	},
 	beforeUnmount() {
 		this.$EventBus.$off('atrio:open-notifications', this.show)
@@ -131,6 +132,16 @@ export default {
 				}
 				else if (cpu.temperature < COOL) this.hot = false
 			}
+		},
+		// Installs made before 0.1.17 update the web UI only: once per version, say how to bring the services
+		async checkServices() {
+			if (!(await checkServices()) || hasNotification(`services-${CURRENT}`)) return
+			notify({
+				key: `services-${CURRENT}`,
+				level: 'warning',
+				title: this.$t('The services on the server need the install command once more'),
+				body: this.$t('They are older than Atrio {version}, so backups, push alerts and safe updates may not work. Run this on the server, once: {command}', { version: CURRENT, command: INSTALL_COMMAND }),
+			})
 		},
 		async checkCasaOS() {
 			try {
