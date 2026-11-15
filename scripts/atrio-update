@@ -21,6 +21,14 @@ KEYRING="${ATRIO_RELEASE_KEY:-/usr/local/share/atrio/release-key.gpg}"
 SERVER_VERSION="$STATE/server-version"
 MODE="${1:-}"
 
+# Run by hand from the web terminal of CasaOS or Atrio, the terminal goes through the gateway that
+# this restarts: its session closes then, and the update must still finish
+trap '' HUP
+# Messages for the person watching: a terminal that went away is not an error
+say() {
+	echo "$@" 2>/dev/null || true
+}
+
 mkdir -p "$STATE"
 
 if [ "$MODE" = "--restore" ]; then
@@ -65,7 +73,7 @@ write_status() {
 	mv "$STATUS.tmp" "$STATUS"
 	# Run by hand (install.sh), each step shows in the terminal too
 	if [ "$1" = running ] && [ -t 2 ]; then
-		echo "$2..." >&2
+		say "$2..." >&2
 	fi
 }
 
@@ -222,6 +230,11 @@ if [ "$MODE" != "--restore" ] && ! update_server "$latest"; then
 	DONE="Atrio $latest installed, but the services on the server could not be updated: run the install command once more"
 fi
 
+# The web terminal of CasaOS and Atrio closes with the gateway: say so before it goes
+if [ -t 2 ]; then
+	say "If this runs in the web terminal of CasaOS or Atrio, it closes now: the update still finishes. Reload the page in a few seconds." >&2
+fi
+
 # The gateway dates every file with its own start time, so browsers that revalidate their cached
 # index.html get 304 forever. A restart gives a new date and every browser loads the new version.
 # Done before reporting "done", so the web UI only reloads once the gateway is back.
@@ -231,4 +244,4 @@ sleep 3
 
 write_status done "$DONE"
 log_activity atrio-update ok "" "$latest"
-echo "$DONE"
+say "$DONE"

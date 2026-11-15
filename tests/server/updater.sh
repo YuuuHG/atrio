@@ -73,6 +73,18 @@ check "Atrio comes back after a CasaOS update" has "$ATRIO_WWW/index.html" Atrio
 check "and keeps that CasaOS UI for the uninstaller" has "$ATRIO_STATE/casaos-ui-original/index.html" CasaOS
 check "without touching the services" test ! -e "$ATRIO_ROOT/usr/local/bin/atrio-backup"
 
+# Run from the web terminal of CasaOS or Atrio, the session closes when the gateway restarts: the
+# hang-up and a terminal that is gone must not stop the update half way
+echo '{"version":"0.1.16"}' > "$ATRIO_WWW/atrio-version.json"
+rm -f "$ATRIO_STATE/update-status.json"
+setsid bash "$SCRIPTS/atrio-update" 2>&- >&- &
+pid=$!
+sleep 0.5
+kill -HUP -- "-$pid" 2>/dev/null
+wait "$pid"
+check "an update whose terminal hangs up still finishes" is "$(status)" "Atrio 9.9.9 installed"
+check "and installs the new web UI" has "$ATRIO_WWW/atrio-version.json" 9.9.9
+
 # atrio-setup alone: every service and unit, from a folder with the release's scripts
 ATRIO_ROOT="$SB/root2" bash -c 'mkdir -p "$ATRIO_ROOT/etc/systemd/system" "$ATRIO_ROOT/usr/local/bin"; bash "$1" "$2"' _ "$SCRIPTS/atrio-setup" "$SB/server" >/dev/null 2>&1
 units=$(ls "$SB/root2/etc/systemd/system" | wc -l)

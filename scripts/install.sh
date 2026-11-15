@@ -92,6 +92,9 @@ main() {
 		rm -f "$STATE/server-version"
 	fi
 
+	# From the web terminal of CasaOS or Atrio, the session closes when the updater restarts the
+	# gateway: the install goes on to the end anyway (the updater ignores the hang-up too)
+	trap '' HUP
 	# The services just set up from a checkout stay: the updater installs only the web UI then
 	if [ -n "${ATRIO_SOURCE:-}" ]; then
 		ATRIO_KEEP_SERVER=1 /usr/local/bin/atrio-update --force
@@ -99,9 +102,11 @@ main() {
 		/usr/local/bin/atrio-update --force
 	fi
 
-	echo
-	echo "Done: open CasaOS in your browser and reload the page (Ctrl+F5)."
-	echo "To go back to the CasaOS UI: curl -fsSL $RAW/scripts/uninstall.sh | sudo bash"
+	{
+		echo
+		echo "Done: open CasaOS in your browser and reload the page (Ctrl+F5)."
+		echo "To go back to the CasaOS UI: curl -fsSL $RAW/scripts/uninstall.sh | sudo bash"
+	} 2>/dev/null || true
 }
 
 main "$@"

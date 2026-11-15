@@ -12,6 +12,13 @@ What changes in each Atrio release. The section for a version is also the text o
   It counts once it is seen twice in a row, so restarts and updates are not taken for a problem, and an app stopped
   by you is not one. The alert can be turned off in the push alert settings, under "Apps that stop working".
 
+**Fixed**
+
+- **The install command from the web terminal of CasaOS or Atrio** looked stuck at "Installing Atrio": that terminal
+  goes through the CasaOS gateway, which the updater restarts, so its session closed there. The install did finish,
+  but did not say so. Now it says before the restart that the window will close and that the install goes on, and
+  it finishes to the end even with the terminal gone.
+
 ## 0.1.19 — 2026-11-15
 
 **New**

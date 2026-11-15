@@ -17,6 +17,13 @@ for file in atrio-update atrio-alerts atrio-backup atrio-release-key.gpg; do
 	[ -f "$SRC/$file" ] && [ ! -L "$SRC/$file" ] || { echo "Missing $file in $SRC" >&2; exit 1; }
 done
 
+# Progress for the person watching; a terminal that went away (the web terminal closes with the
+# gateway) must not stop the setup half way
+trap '' HUP
+say() {
+	echo "$@" 2>/dev/null || true
+}
+
 # Each file is written next to the old one, then moved in place: a script that is running (the
 # updater replaces itself) keeps reading its old copy
 install_script() {
@@ -40,7 +47,7 @@ install_script atrio-update
 install_script atrio-alerts
 install_script atrio-backup
 
-echo "Setting up their services..."
+say "Setting up their services..."
 cat > "$ROOT"/etc/systemd/system/atrio-update.service <<'UNIT'
 [Unit]
 Description=Install the latest Atrio web UI for CasaOS
@@ -211,7 +218,7 @@ systemctl enable --now atrio-alerts-test.path >/dev/null
 systemctl enable --now atrio-backup.path >/dev/null
 systemctl enable --now atrio-backup-schedule.timer >/dev/null
 systemctl enable --now atrio-check-updates.timer >/dev/null
-echo "Starting push alerts and backups..."
+say "Starting push alerts and backups..."
 # A first run writes the status the settings read (alerts stay off until set up there)
 [ "$MODE" = "--update" ] || "$ROOT"/usr/local/bin/atrio-alerts || true
 # Tells the web UI that backups are available
