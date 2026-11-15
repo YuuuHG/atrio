@@ -2,7 +2,7 @@
 
 What changes in each Atrio release. The section for a version is also the text of its GitHub release.
 
-## 0.1.19 — unreleased
+## 0.1.19 — 2026-11-15
 
 **New**
 
