@@ -946,5 +946,16 @@
   "Cable errors": "Errori di cavo",
   "Read from SMART every hour, without waking disks that sleep. A disk that gets worse sends a push alert.": "Letti da SMART ogni ora, senza svegliare i dischi in standby. Un disco che peggiora manda un avviso push.",
   "Disk {device} may fail soon: back up its data and plan to replace it": "Il disco {device} rischia di guastarsi presto: fai un backup e pensa a sostituirlo",
-  "Disk {device} shows the first signs of trouble": "Il disco {device} mostra i primi segni di problemi"
+  "Disk {device} shows the first signs of trouble": "Il disco {device} mostra i primi segni di problemi",
+  "Quiet hours": "Ore di silenzio",
+  "Hold back what is not urgent": "Trattieni quello che non è urgente",
+  "From": "Dalle",
+  "to": "alle",
+  "What comes in those hours arrives in one message when they end. A disk that may fail soon is sent at once.": "Quello che arriva in quelle ore ti raggiunge in un solo messaggio quando finiscono. Un disco che rischia di guastarsi viene segnalato subito.",
+  "Limits": "Soglie",
+  "Disk almost full above": "Disco quasi pieno oltre il",
+  "Processor hot above": "Processore caldo oltre i",
+  "The disk limit goes from 50 to 99%, the processor from 60 to 110 °C.": "La soglia del disco va dal 50 al 99%, quella del processore da 60 a 110 °C.",
+  "Apps without alerts": "App senza avvisi",
+  "Their installs, updates and problems are still in Activity and on their tiles.": "Installazioni, aggiornamenti e problemi di queste app restano comunque in Attività e sui loro riquadri."
 }

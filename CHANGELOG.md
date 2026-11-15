@@ -16,6 +16,10 @@ What changes in each Atrio release. The section for a version is also the text o
   Keep an eye on it, Replace soon) and what it is based on: sectors waiting to be replaced, errors the disk could
   not correct, reallocated sectors, wear, cable errors, heat, age. A verdict that gets worse goes to Activity and to
   push alerts, under "Disk health problems", instead of waiting for the disk's own pass or fail.
+- **Quiet hours, limits and apps without alerts**, in the push alert settings. In quiet hours (say 23:00 to 07:00)
+  what is not urgent waits and arrives in one message when they end; a disk that may fail soon is sent at once. The
+  limits for a disk almost full and a hot processor can be set, and apps can be left out of alerts while their
+  changes and problems still show in Activity and on their tiles.
 
 **Fixed**
 

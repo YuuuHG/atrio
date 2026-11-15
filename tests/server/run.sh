@@ -7,7 +7,7 @@ for tool in python3 openssl gpg gpgv flock tar; do
 	command -v "$tool" >/dev/null || { echo "Missing $tool, needed by the tests" >&2; exit 1; }
 done
 files=("$@")
-[ "${#files[@]}" -gt 0 ] || files=(backup schedule updates images settings updater alerts health disks)
+[ "${#files[@]}" -gt 0 ] || files=(backup schedule updates images settings updater alerts health disks quiet)
 failed=0
 for name in "${files[@]}"; do
 	bash "./$name.sh" || failed=1

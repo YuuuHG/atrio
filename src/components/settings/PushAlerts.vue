@@ -2,6 +2,8 @@
 // Push alerts settings, in the settings panel. Atrio writes alerts.conf through the CasaOS file
 // API; atrio-alerts (installed by scripts/install.sh) reads it every 5 minutes and sends the
 // warnings to ntfy, Gotify or Apprise. "Send a test" goes through the server, like the real alerts.
+import { ice_i18n } from '@/mixins/base/common-i18n'
+
 const STATE = '/var/lib/casaos/atrio'
 const CONF = `${STATE}/alerts.conf`
 const STATUS = `${STATE}/alerts-status.json`
@@ -21,6 +23,12 @@ const DEFAULTS = {
 	APP_UPDATES: '1',
 	APP_DOWN: '1',
 	UPDATES: '1',
+	DISK_LIMIT: '90',
+	TEMP_LIMIT: '85',
+	QUIET: '0',
+	QUIET_FROM: '23:00',
+	QUIET_TO: '07:00',
+	MUTE: '',
 }
 
 function randomTopic() {
@@ -43,6 +51,8 @@ export default {
 			saved: false,
 			install: INSTALL,
 			services: [{ id: 'ntfy', name: 'ntfy' }, { id: 'gotify', name: 'Gotify' }, { id: 'apprise', name: 'Apprise' }],
+			// Installed apps, for the ones without alerts: { name, title }
+			apps: [],
 		}
 	},
 	computed: {
@@ -77,8 +87,17 @@ export default {
 			if (this.isApprise) return true
 			return /^[A-Za-z0-9._-]{0,128}$/.test(this.conf.TOKEN) && (!this.isGotify || this.conf.TOKEN !== '')
 		},
+		limitsValid() {
+			const disk = Number(this.conf.DISK_LIMIT)
+			const temp = Number(this.conf.TEMP_LIMIT)
+			const time = /^([01][0-9]|2[0-3]):[0-5][0-9]$/
+			return disk >= 50 && disk <= 99 && temp >= 60 && temp <= 110 && time.test(this.conf.QUIET_FROM) && time.test(this.conf.QUIET_TO)
+		},
 		ready() {
-			return this.urlValid && this.topicValid && this.tokenValid
+			return this.urlValid && this.topicValid && this.tokenValid && this.limitsValid
+		},
+		muted() {
+			return this.conf.MUTE ? this.conf.MUTE.split(',') : []
 		},
 		checks() {
 			return [
@@ -101,6 +120,7 @@ export default {
 	},
 	mounted() {
 		this.load()
+		this.loadApps()
 	},
 	beforeUnmount() {
 		clearTimeout(this.pollTimer)
@@ -132,6 +152,21 @@ export default {
 					if (at > 0 && key in DEFAULTS) this.conf[key] = line.slice(at + 1).trim()
 				}
 			}
+		},
+		async loadApps() {
+			try {
+				const grid = (await this.$openAPI.appGrid.getAppGrid()).data.data || []
+				this.apps = grid.filter((app) => app.app_type === 'v2app')
+					.map((app) => ({ name: app.name, title: typeof app.title === 'object' ? ice_i18n(app.title) : app.title || app.name }))
+					.sort((a, b) => a.title.localeCompare(b.title))
+			}
+			catch (e) {
+				this.apps = []
+			}
+		},
+		toggleMute(name) {
+			const muted = this.muted.includes(name) ? this.muted.filter((item) => item !== name) : [...this.muted, name]
+			this.conf.MUTE = muted.join(',')
 		},
 		setService(service) {
 			if (this.conf.SERVICE === service) return
@@ -285,6 +320,49 @@ export default {
 					</label>
 				</fieldset>
 
+				<fieldset class="atrio-push-checks">
+					<legend>{{ $t('Quiet hours') }}</legend>
+					<label>
+						<input :checked="conf.QUIET === '1'" type="checkbox" @change="conf.QUIET = $event.target.checked ? '1' : '0'">
+						{{ $t('Hold back what is not urgent') }}
+					</label>
+					<div v-if="conf.QUIET === '1'" class="atrio-push-row">
+						<span>{{ $t('From') }}</span>
+						<input v-model="conf.QUIET_FROM" class="atrio-push-input is-short" required type="time">
+						<span>{{ $t('to') }}</span>
+						<input v-model="conf.QUIET_TO" class="atrio-push-input is-short" required type="time">
+					</div>
+					<small v-if="conf.QUIET === '1'" class="atrio-push-hint">{{ $t('What comes in those hours arrives in one message when they end. A disk that may fail soon is sent at once.') }}</small>
+				</fieldset>
+
+				<fieldset class="atrio-push-checks">
+					<legend>{{ $t('Limits') }}</legend>
+					<div class="atrio-push-row">
+						<span>{{ $t('Disk almost full above') }}</span>
+						<input v-model="conf.DISK_LIMIT" class="atrio-push-input is-number" max="99" min="50" type="number">
+						<span>%</span>
+					</div>
+					<div class="atrio-push-row">
+						<span>{{ $t('Processor hot above') }}</span>
+						<input v-model="conf.TEMP_LIMIT" class="atrio-push-input is-number" max="110" min="60" type="number">
+						<span>°C</span>
+					</div>
+					<small v-if="!limitsValid" class="atrio-push-hint is-error">{{ $t('The disk limit goes from 50 to 99%, the processor from 60 to 110 °C.') }}</small>
+				</fieldset>
+
+				<fieldset v-if="apps.length" class="atrio-push-checks">
+					<legend>{{ $t('Apps without alerts') }}</legend>
+					<div class="atrio-push-apps">
+						<button
+							v-for="app in apps" :key="app.name" :aria-pressed="muted.includes(app.name)" :class="{ 'is-muted': muted.includes(app.name) }"
+							type="button" @click="toggleMute(app.name)"
+						>
+							<b-icon :icon="muted.includes(app.name) ? 'bell-off-outline' : 'bell-outline'" pack="mdi" size="is-16" />{{ app.title }}
+						</button>
+					</div>
+					<small class="atrio-push-hint">{{ $t('Their installs, updates and problems are still in Activity and on their tiles.') }}</small>
+				</fieldset>
+
 				<div class="atrio-push-actions">
 					<button :disabled="!ready || saving" class="atrio-button is-small" type="button" @click="save">
 						{{ saved ? $t('Saved') : $t('Save') }}
@@ -351,6 +429,55 @@ export default {
 
 		.atrio-button {
 			flex-shrink: 0;
+		}
+	}
+
+	.atrio-push-row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+		align-items: center;
+		color: var(--atrio-text);
+		font-size: 0.875rem;
+	}
+
+	.atrio-push-input.is-short {
+		width: 7rem;
+		color-scheme: dark;
+	}
+
+	.atrio-push-input.is-number {
+		width: 5rem;
+	}
+
+	.atrio-push-hint.is-error {
+		color: #fca5a5;
+	}
+
+	.atrio-push-apps {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.375rem;
+
+		button {
+			display: flex;
+			gap: 0.25rem;
+			align-items: center;
+			min-height: 2rem;
+			padding: 0 0.75rem;
+			border: 1px solid rgba(255, 255, 255, 0.12);
+			border-radius: 999px;
+			background: rgba(255, 255, 255, 0.06);
+			color: var(--atrio-text);
+			font: inherit;
+			font-size: 0.8125rem;
+			cursor: pointer;
+
+			&.is-muted {
+				background: rgba(248, 113, 113, 0.14);
+				color: #fecaca;
+				text-decoration: line-through;
+			}
 		}
 	}
 

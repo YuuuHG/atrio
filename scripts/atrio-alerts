@@ -28,6 +28,9 @@ flock -w 30 9 || exit 0
 
 ENABLED=0 SERVICE=ntfy URL="https://ntfy.sh" TOPIC="" TOKEN="" LANGUAGE=en
 DISK=1 HEALTH=1 TEMP=1 APPS_CHANGES=1 APP_UPDATES=1 UPDATES=1 APP_DOWN=1 DISK_LIMIT=90 TEMP_LIMIT=85
+# Quiet hours hold back what is not urgent until they end; muted apps send nothing (their changes are still logged)
+QUIET=0 QUIET_FROM=23:00 QUIET_TO=07:00 MUTE=""
+QUEUE="$STATE/alerts-queue"
 
 read_conf() {
 	[ -f "$CONF" ] || return 0
@@ -35,7 +38,7 @@ read_conf() {
 	while IFS='=' read -r key value; do
 		value="${value%$'\r'}"
 		case "$key" in
-			ENABLED | DISK | HEALTH | TEMP | APPS | APP_UPDATES | UPDATES | APP_DOWN)
+			ENABLED | DISK | HEALTH | TEMP | APPS | APP_UPDATES | UPDATES | APP_DOWN | QUIET)
 				[[ "$value" =~ ^[01]$ ]] || continue
 				[ "$key" = APPS ] && key=APPS_CHANGES
 				printf -v "$key" '%s' "$value" ;;
@@ -46,6 +49,8 @@ read_conf() {
 			LANGUAGE) [[ "$value" =~ ^(en|it)$ ]] && LANGUAGE="$value" ;;
 			DISK_LIMIT) [[ "$value" =~ ^[5-9][0-9]$ ]] && DISK_LIMIT="$value" ;;
 			TEMP_LIMIT) [[ "$value" =~ ^([6-9][0-9]|10[0-9]|110)$ ]] && TEMP_LIMIT="$value" ;;
+			QUIET_FROM | QUIET_TO) [[ "$value" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]] && printf -v "$key" '%s' "$value" ;;
+			MUTE) [[ "$value" =~ ^[A-Za-z0-9_.,-]{0,2000}$ ]] && MUTE="$value" ;;
 		esac
 	done < "$CONF"
 }
@@ -107,6 +112,8 @@ text() {
 			removed_body) echo "$1 è stata rimossa." ;;
 			app_updated_title) echo "App aggiornata" ;;
 			app_updated_body) echo "$1 è stata aggiornata." ;;
+			queue_title) echo "Durante le ore di silenzio" ;;
+			queue_more) echo "… e altri $1." ;;
 			down_title) echo "App non funzionante" ;;
 			down_restarting) echo "$1 continua a riavviarsi." ;;
 			down_crashed) echo "$1 si è fermata da sola (codice $2)." ;;
@@ -137,6 +144,8 @@ text() {
 			removed_body) echo "$1 was removed." ;;
 			app_updated_title) echo "App updated" ;;
 			app_updated_body) echo "$1 was updated." ;;
+			queue_title) echo "During quiet hours" ;;
+			queue_more) echo "… and $1 more." ;;
 			down_title) echo "App down" ;;
 			down_restarting) echo "$1 keeps restarting." ;;
 			down_crashed) echo "$1 stopped on its own (exit code $2)." ;;
@@ -178,7 +187,47 @@ post() {
 	return 1
 }
 
+# Whether now is within quiet hours, which can run past midnight
+quiet_now() {
+	[ "$QUIET" = 1 ] || return 1
+	local now from to
+	now=$((10#$(date +%H) * 60 + 10#$(date +%M)))
+	from=$((10#${QUIET_FROM%:*} * 60 + 10#${QUIET_FROM#*:}))
+	to=$((10#${QUIET_TO%:*} * 60 + 10#${QUIET_TO#*:}))
+	if [ "$from" -le "$to" ]; then
+		[ "$now" -ge "$from" ] && [ "$now" -lt "$to" ]
+	else
+		[ "$now" -ge "$from" ] || [ "$now" -lt "$to" ]
+	fi
+}
+
+muted() {
+	[[ ",$MUTE," == *",$1,"* ]]
+}
+
+# send TITLE MESSAGE PRIORITY(1-5) NTFY_TAGS: in quiet hours, what is not urgent (below 5) waits
+# in the queue and goes out as one message when they end
 send() {
+	if [ "${4:-}" != bell ] && [ "$3" -lt 5 ] && quiet_now; then
+		printf '%s\t%s\n' "$1" "$2" | tr -d '\r' >> "$QUEUE"
+		chmod 600 "$QUEUE" 2>/dev/null
+		return 0
+	fi
+	send_now "$@"
+}
+
+# What waited during quiet hours, in one message
+flush_queue() {
+	[ -s "$QUEUE" ] && ! quiet_now || return 0
+	local count body
+	count=$(wc -l < "$QUEUE")
+	body=$(head -n 15 "$QUEUE" | awk -F'\t' '{ print "• " $1 ": " $2 }')
+	[ "$count" -gt 15 ] && body="$body
+$(text queue_more $((count - 15)))"
+	send_now "$(text queue_title)" "$body" 3 "zzz" && rm -f "$QUEUE"
+}
+
+send_now() {
 	local title="$1" message="$2" priority="$3" tags="$4" result=""
 	if [ "$SERVICE" = gotify ]; then
 		post -F "title=$title" -F "message=$message" -F "priority=$priority" "$URL/message?token=$TOKEN"
@@ -411,12 +460,12 @@ check_apps() {
 	for name in $now; do
 		[[ " $before " == *" $name "* ]] && continue
 		log_activity app-installed ok "$name" ""
-		[ "${SEND_APPS:-1}" = 1 ] && send "$(text installed_title)" "$(text installed_body "$(app_title "$name")")" 3 "white_check_mark"
+		[ "${SEND_APPS:-1}" = 1 ] && ! muted "$name" && send "$(text installed_title)" "$(text installed_body "$(app_title "$name")")" 3 "white_check_mark"
 	done
 	for name in $before; do
 		[[ " $now " == *" $name "* ]] && continue
 		log_activity app-removed ok "$name" ""
-		[ "${SEND_APPS:-1}" = 1 ] && send "$(text removed_title)" "$(text removed_body "$name")" 2 "wastebasket"
+		[ "${SEND_APPS:-1}" = 1 ] && ! muted "$name" && send "$(text removed_title)" "$(text removed_body "$name")" 2 "wastebasket"
 	done
 }
 
@@ -459,7 +508,7 @@ check_app_updates() {
 				recently_updated_here "$name" || log_activity app-updated ok "$name" ""
 				memory_set "logged_$name" "$now"
 			fi
-			if [ "${SEND_APPS:-1}" = 1 ]; then
+			if [ "${SEND_APPS:-1}" = 1 ] && ! muted "$name"; then
 				send "$(text app_updated_title)" "$(text app_updated_body "$(app_title "$name")")" 3 "arrow_up" || continue
 			fi
 		fi
@@ -552,7 +601,7 @@ check_app_health() {
 					memory_set "app_bad_$app" 0
 					if [ -n "$shown" ] && [ "$shown" != ok ] && [ "$shown" != stopped ]; then
 						log_activity app-up ok "$app" ""
-						[ "${SEND_DOWN:-1}" = 1 ] && send "$(text up_title)" "$(text up_body "$(app_title "$app")")" 3 "white_check_mark"
+						[ "${SEND_DOWN:-1}" = 1 ] && ! muted "$app" && send "$(text up_title)" "$(text up_body "$(app_title "$app")")" 3 "white_check_mark"
 					fi
 					shown="$condition"
 					memory_set "app_since_$app" "$(date -Iseconds)" ;;
@@ -562,7 +611,7 @@ check_app_health() {
 					if [ "$count" -ge 2 ] && [ "$shown" != "$condition" ]; then
 						title=$(app_title "$app")
 						log_activity app-down error "$app" "$condition $detail"
-						if [ "${SEND_DOWN:-1}" = 1 ]; then
+						if [ "${SEND_DOWN:-1}" = 1 ] && ! muted "$app"; then
 							case "$condition" in
 								restarting) send "$(text down_title)" "$(text down_restarting "$title")" 4 "warning" ;;
 								crashed) send "$(text down_title)" "$(text down_crashed "$title" "$detail")" 4 "warning" ;;
@@ -650,7 +699,7 @@ if [ "$MODE" = "--test" ]; then
 		write_status error "Not set up yet"
 		exit 1
 	fi
-	if send "$(text test_title)" "$(text test_body)" 3 "bell"; then
+	if send_now "$(text test_title)" "$(text test_body)" 3 "bell"; then
 		write_status ok "Test sent"
 	else
 		write_status error "$LAST_ERROR"
@@ -678,6 +727,7 @@ if [ "$APP_UPDATES" = 1 ]; then check_app_updates; else SEND_APPS=0 check_app_up
 [ "$UPDATES" = 1 ] && check_updates
 if [ "$APP_DOWN" = 1 ]; then check_app_health; else SEND_DOWN=0 check_app_health; fi
 check_backups
+flush_queue
 
 if [ -n "$LAST_ERROR" ]; then
 	write_status error "$LAST_ERROR"

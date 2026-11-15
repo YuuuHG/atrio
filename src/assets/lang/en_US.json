@@ -946,5 +946,16 @@
   "Cable errors": "Cable errors",
   "Read from SMART every hour, without waking disks that sleep. A disk that gets worse sends a push alert.": "Read from SMART every hour, without waking disks that sleep. A disk that gets worse sends a push alert.",
   "Disk {device} may fail soon: back up its data and plan to replace it": "Disk {device} may fail soon: back up its data and plan to replace it",
-  "Disk {device} shows the first signs of trouble": "Disk {device} shows the first signs of trouble"
+  "Disk {device} shows the first signs of trouble": "Disk {device} shows the first signs of trouble",
+  "Quiet hours": "Quiet hours",
+  "Hold back what is not urgent": "Hold back what is not urgent",
+  "From": "From",
+  "to": "to",
+  "What comes in those hours arrives in one message when they end. A disk that may fail soon is sent at once.": "What comes in those hours arrives in one message when they end. A disk that may fail soon is sent at once.",
+  "Limits": "Limits",
+  "Disk almost full above": "Disk almost full above",
+  "Processor hot above": "Processor hot above",
+  "The disk limit goes from 50 to 99%, the processor from 60 to 110 °C.": "The disk limit goes from 50 to 99%, the processor from 60 to 110 °C.",
+  "Apps without alerts": "Apps without alerts",
+  "Their installs, updates and problems are still in Activity and on their tiles.": "Their installs, updates and problems are still in Activity and on their tiles."
 }
