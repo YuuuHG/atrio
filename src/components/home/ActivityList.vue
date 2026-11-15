@@ -14,6 +14,8 @@ const ACTIONS = {
 	'app-installed': ['download-outline', '{app} was installed'],
 	'app-removed': ['trash-can-outline', '{app} was removed'],
 	'app-updated': ['arrow-up-circle-outline', '{app} was updated'],
+	'app-down': ['alert-circle-outline', '{app} is not working: {detail}', '{app} is not working: {detail}'],
+	'app-up': ['check-circle-outline', '{app} is working again'],
 	'update-app': ['arrow-up-circle-outline', '{app} was updated to a newer image of the same version, after a backup', '{app} was not updated: {detail}'],
 	'backup': ['archive-outline', 'Backup of {app} ({detail})', 'Backup of {app} failed: {detail}'],
 	'restore': ['backup-restore', '{app} went back to a backup', 'Restore of {app} failed: {detail}'],
@@ -102,6 +104,10 @@ export default {
 				case 'remove-images': {
 					const [count, freed] = words.map(Number)
 					return event.result === 'ok' ? this.$t('{count} unused images removed', { count: count || 0 }) + (freed > 0 ? ` (${this.size(freed)})` : '') : this.$t(event.detail)
+				}
+				case 'app-down': {
+					const what = { 'restarting': 'Keeps restarting', 'crashed': 'Stopped on its own', 'unhealthy': 'Not healthy', 'no-answer': 'Not answering' }[words[0]]
+					return what ? this.$t(what).toLowerCase() + (words[0] === 'crashed' && words[1] ? ` (${words[1]})` : '') : event.detail
 				}
 				default: return event.result === 'error' ? this.$t(event.detail) : event.detail
 			}

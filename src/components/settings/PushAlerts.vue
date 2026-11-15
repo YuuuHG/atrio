@@ -19,6 +19,7 @@ const DEFAULTS = {
 	TEMP: '1',
 	APPS: '1',
 	APP_UPDATES: '1',
+	APP_DOWN: '1',
 	UPDATES: '1',
 }
 
@@ -86,6 +87,7 @@ export default {
 				{ key: 'TEMP', label: this.$t('Processor running hot') },
 				{ key: 'APPS', label: this.$t('Apps installed or removed') },
 				{ key: 'APP_UPDATES', label: this.$t('Apps updated') },
+				{ key: 'APP_DOWN', label: this.$t('Apps that stop working, and when they are back') },
 				{ key: 'UPDATES', label: this.$t('New Atrio versions') },
 			]
 		},

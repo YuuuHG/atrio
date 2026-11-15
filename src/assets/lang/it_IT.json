@@ -907,5 +907,12 @@
   "Going back": "Ritorno indietro",
   "The services on the server (updates, backups, push alerts) are older than this version, so some features do not work yet. Run this command once on the server; after that, updates bring them too:": "I servizi sul server (aggiornamenti, backup, avvisi push) sono più vecchi di questa versione, quindi alcune funzioni non vanno ancora. Esegui questo comando una volta sul server; da lì in poi gli aggiornamenti li portano da soli:",
   "The services on the server need the install command once more": "I servizi sul server hanno bisogno del comando di installazione ancora una volta",
-  "They are older than Atrio {version}, so backups, push alerts and safe updates may not work. Run this on the server, once: {command}": "Sono più vecchi di Atrio {version}, quindi backup, avvisi push e aggiornamenti sicuri potrebbero non funzionare. Esegui questo sul server, una volta sola: {command}"
+  "They are older than Atrio {version}, so backups, push alerts and safe updates may not work. Run this on the server, once: {command}": "Sono più vecchi di Atrio {version}, quindi backup, avvisi push e aggiornamenti sicuri potrebbero non funzionare. Esegui questo sul server, una volta sola: {command}",
+  "Apps that stop working, and when they are back": "App che smettono di funzionare, e quando ripartono",
+  "Keeps restarting": "Continua a riavviarsi",
+  "Stopped on its own": "Si è fermata da sola",
+  "Not healthy": "Non in salute",
+  "Not answering": "Non risponde",
+  "{app} is not working: {detail}": "{app} non funziona: {detail}",
+  "{app} is working again": "{app} funziona di nuovo"
 }

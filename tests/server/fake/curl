@@ -26,6 +26,13 @@ if m:
         sys.stdout.write('HTTP/1.1 404 Not Found\r\n\r\n')
     sys.exit(0)
 
+# An app's own page: the answer set in state["pages"]["<port>"], or none at all
+m = re.match(r'https?://127\.0\.0\.1:(\d+)/', url)
+if m:
+    state = json.load(open(os.path.join(DIR, 'state.json')))
+    sys.stdout.write(str(state.get('pages', {}).get(m.group(1), '000')))
+    sys.exit(0 if state.get('pages', {}).get(m.group(1)) else 7)
+
 with open(os.path.join(DIR, 'sent.log'), 'a') as log:
     log.write(' '.join(args) + '\n')
 code = '400' if os.path.exists(os.path.join(DIR, 'push-fails')) else '200'

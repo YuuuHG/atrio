@@ -27,7 +27,7 @@ flock -w 30 9 || exit 0
 # --- Settings ---------------------------------------------------------------------------------
 
 ENABLED=0 SERVICE=ntfy URL="https://ntfy.sh" TOPIC="" TOKEN="" LANGUAGE=en
-DISK=1 HEALTH=1 TEMP=1 APPS_CHANGES=1 APP_UPDATES=1 UPDATES=1 DISK_LIMIT=90 TEMP_LIMIT=85
+DISK=1 HEALTH=1 TEMP=1 APPS_CHANGES=1 APP_UPDATES=1 UPDATES=1 APP_DOWN=1 DISK_LIMIT=90 TEMP_LIMIT=85
 
 read_conf() {
 	[ -f "$CONF" ] || return 0
@@ -35,7 +35,7 @@ read_conf() {
 	while IFS='=' read -r key value; do
 		value="${value%$'\r'}"
 		case "$key" in
-			ENABLED | DISK | HEALTH | TEMP | APPS | APP_UPDATES | UPDATES)
+			ENABLED | DISK | HEALTH | TEMP | APPS | APP_UPDATES | UPDATES | APP_DOWN)
 				[[ "$value" =~ ^[01]$ ]] || continue
 				[ "$key" = APPS ] && key=APPS_CHANGES
 				printf -v "$key" '%s' "$value" ;;
@@ -105,6 +105,13 @@ text() {
 			removed_body) echo "$1 è stata rimossa." ;;
 			app_updated_title) echo "App aggiornata" ;;
 			app_updated_body) echo "$1 è stata aggiornata." ;;
+			down_title) echo "App non funzionante" ;;
+			down_restarting) echo "$1 continua a riavviarsi." ;;
+			down_crashed) echo "$1 si è fermata da sola (codice $2)." ;;
+			down_unhealthy) echo "$1 segnala di non stare bene (controllo di salute)." ;;
+			down_no_answer) echo "$1 è avviata ma la sua pagina non risponde." ;;
+			up_title) echo "App di nuovo attiva" ;;
+			up_body) echo "$1 funziona di nuovo." ;;
 			backup_title) echo "Backup automatico non riuscito" ;;
 			backup_body) echo "Il backup automatico di $1 non è riuscito: $2" ;;
 			update_title) echo "Nuova versione di Atrio" ;;
@@ -126,6 +133,13 @@ text() {
 			removed_body) echo "$1 was removed." ;;
 			app_updated_title) echo "App updated" ;;
 			app_updated_body) echo "$1 was updated." ;;
+			down_title) echo "App down" ;;
+			down_restarting) echo "$1 keeps restarting." ;;
+			down_crashed) echo "$1 stopped on its own (exit code $2)." ;;
+			down_unhealthy) echo "$1 reports it is not healthy (health check)." ;;
+			down_no_answer) echo "$1 is running but its page does not answer." ;;
+			up_title) echo "App working again" ;;
+			up_body) echo "$1 is working again." ;;
 			backup_title) echo "Automatic backup failed" ;;
 			backup_body) echo "The automatic backup of $1 failed: $2" ;;
 			update_title) echo "New Atrio version" ;;
@@ -320,6 +334,126 @@ check_app_updates() {
 	done
 }
 
+# --- App health ---------------------------------------------------------------------------------
+
+HEALTH_JSON="$STATE/health.json"
+
+# A value from the x-casaos block of an app's compose file (port_map, scheme, index)
+xcasaos() {
+	awk -v key="$2" '
+		/^x-casaos:/ { x = 1; level = -1; next }
+		/^[^ ]/ { x = 0 }
+		x && /^ +[^ ]/ {
+			match($0, /^ */); n = RLENGTH
+			if (level < 0) level = n
+			if (n == level && index($0, key ":") == n + 1) {
+				value = substr($0, n + length(key) + 2); gsub(/^ +| +$|["'"'"']/, "", value); print value; exit
+			}
+		}' "$APPS/$1/docker-compose.yml" 2>/dev/null
+}
+
+# How an app is doing: ok, stopped (by someone), restarting, crashed, unhealthy or no-answer,
+# then a tab and a detail (the exit code of a crash)
+app_condition() {
+	local app="$1" ids line status code oom health restarts name stopped=0 running=0 total=0 before port scheme index url answer
+	ids=$(timeout 20 docker ps -aq --filter "label=com.docker.compose.project=$app" 2>/dev/null)
+	[ -n "$ids" ] || { printf 'none	'; return; }
+	local all_restarts=0
+	while read -r status code oom health restarts name; do
+		[ -n "$status" ] || continue
+		total=$((total + 1))
+		all_restarts=$((all_restarts + ${restarts:-0}))
+		case "$status" in
+			restarting) printf 'restarting	'; return ;;
+			running)
+				running=$((running + 1))
+				[ "$health" = unhealthy ] && { printf 'unhealthy	'; return; } ;;
+			exited|dead)
+				if [ "$oom" = true ] || ! [[ "$code" =~ ^(0|137|143)$ ]]; then
+					printf 'crashed	%s' "$code"
+					return
+				fi
+				stopped=$((stopped + 1)) ;;
+		esac
+	# shellcheck disable=SC2086
+	done < <(timeout 20 docker inspect -f '{{.State.Status}} {{.State.ExitCode}} {{.State.OOMKilled}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} {{.RestartCount}} {{.Name}}' $ids 2>/dev/null)
+	# Restarted again and again between two checks, even if it happens to be up right now
+	before=$(memory_get "app_restarts_$app")
+	memory_set "app_restarts_$app" "$all_restarts"
+	if [ -n "$before" ] && [ $((all_restarts - before)) -ge 3 ]; then
+		printf 'restarting	'
+		return
+	fi
+	[ "$stopped" -eq "$total" ] && { printf 'stopped	'; return; }
+	# Running: its page must answer, with anything (a login page, a 404 are fine)
+	port=$(xcasaos "$app" port_map)
+	if [ "$running" -eq "$total" ] && [[ "$port" =~ ^[0-9]{1,5}$ ]]; then
+		scheme=$(xcasaos "$app" scheme)
+		[[ "$scheme" =~ ^https?$ ]] || scheme=http
+		url="$scheme://127.0.0.1:$port/"
+		answer=$(curl -sk -o /dev/null -w '%{http_code}' --connect-timeout 5 --max-time 15 "$url" 2>/dev/null)
+		[ "${answer:-000}" = 000 ] && { printf 'no-answer	'; return; }
+	fi
+	printf 'ok	'
+}
+
+# Every installed app; a problem counts once it is seen twice in a row (ten minutes), so that a
+# restart or an update is not taken for one. Skipped while atrio-backup stops apps on purpose.
+check_app_health() {
+	command -v docker >/dev/null && [ -d "$APPS" ] || return 0
+	if [ -f "$STATE/backup.lock" ] && ! flock -n "$STATE/backup.lock" true 2>/dev/null; then
+		return 0
+	fi
+	local app line condition detail shown count first=1 since title
+	{
+		printf '{"time":"%s","apps":{' "$(date -Iseconds)"
+		for app in $(find "$APPS" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort); do
+			[[ "$app" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] && [ -f "$APPS/$app/docker-compose.yml" ] || continue
+			line=$(app_condition "$app")
+			condition="${line%%$'\t'*}"
+			detail="${line#*$'\t'}"
+			[ "$condition" = none ] && continue
+			shown=$(memory_get "app_state_$app")
+			case "$condition" in
+				ok|stopped)
+					memory_set "app_bad_$app" 0
+					if [ -n "$shown" ] && [ "$shown" != ok ] && [ "$shown" != stopped ]; then
+						log_activity app-up ok "$app" ""
+						[ "${SEND_DOWN:-1}" = 1 ] && send "$(text up_title)" "$(text up_body "$(app_title "$app")")" 3 "white_check_mark"
+					fi
+					shown="$condition"
+					memory_set "app_since_$app" "$(date -Iseconds)" ;;
+				*)
+					count=$(( $(memory_get "app_bad_$app" || echo 0) + 1 ))
+					memory_set "app_bad_$app" "$count"
+					if [ "$count" -ge 2 ] && [ "$shown" != "$condition" ]; then
+						title=$(app_title "$app")
+						log_activity app-down error "$app" "$condition $detail"
+						if [ "${SEND_DOWN:-1}" = 1 ]; then
+							case "$condition" in
+								restarting) send "$(text down_title)" "$(text down_restarting "$title")" 4 "warning" ;;
+								crashed) send "$(text down_title)" "$(text down_crashed "$title" "$detail")" 4 "warning" ;;
+								unhealthy) send "$(text down_title)" "$(text down_unhealthy "$title")" 4 "warning" ;;
+								no-answer) send "$(text down_title)" "$(text down_no_answer "$title")" 4 "warning" ;;
+							esac
+						fi
+						shown="$condition"
+						memory_set "app_since_$app" "$(date -Iseconds)"
+					fi
+					# Until it counts, the tile keeps what it showed
+					[ -n "$shown" ] || shown=ok ;;
+			esac
+			memory_set "app_state_$app" "$shown"
+			[ "$first" = 1 ] || printf ','
+			first=0
+			printf '"%s":{"state":"%s","since":"%s","detail":"%s"}' "$app" "$shown" "$(memory_get "app_since_$app")" "$(json_text "$detail")"
+		done
+		printf '}}\n'
+	} > "$HEALTH_JSON.tmp"
+	chmod 644 "$HEALTH_JSON.tmp"
+	mv "$HEALTH_JSON.tmp" "$HEALTH_JSON"
+}
+
 # Automatic backups that failed, each one once (atrio-backup writes the result in schedules/)
 check_backups() {
 	local file name error time
@@ -396,6 +530,8 @@ if [ "$ENABLED" != 1 ] || ! configured; then
 	# Keep the app list current, so turning alerts on later does not announce every app or update
 	SEND_APPS=0 check_apps
 	SEND_APPS=0 check_app_updates
+	# The tiles show how apps are doing also with alerts off
+	SEND_DOWN=0 check_app_health
 	write_status disabled ""
 	exit 0
 fi
@@ -406,6 +542,7 @@ fi
 if [ "$APPS_CHANGES" = 1 ]; then check_apps; else SEND_APPS=0 check_apps; fi
 if [ "$APP_UPDATES" = 1 ]; then check_app_updates; else SEND_APPS=0 check_app_updates; fi
 [ "$UPDATES" = 1 ] && check_updates
+if [ "$APP_DOWN" = 1 ]; then check_app_health; else SEND_DOWN=0 check_app_health; fi
 check_backups
 
 if [ -n "$LAST_ERROR" ]; then

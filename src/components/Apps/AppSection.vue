@@ -86,7 +86,7 @@
 				>
 					<app-card
 						:item="item"
-						:update-available="Boolean(updates[item.name])" :updates-ignored="ignoredUpdates.includes(item.name)"
+						:update-available="Boolean(updates[item.name])" :updates-ignored="ignoredUpdates.includes(item.name)" :health="health[item.name]?.state || ''"
 						:pull-progress="pulling[item.name] ?? null"
 						@configApp="showConfigPanel"
 						@importApp="showContainerPanel"
@@ -203,7 +203,7 @@ import isEqual from 'lodash/isEqual'
 import { ice_i18n } from '@/mixins/base/common-i18n'
 import YAML from 'yamljs'
 import { findDowngrade } from '@/plugins/appVersions'
-import { loadDigestUpdates, loadIgnoredUpdates, updateApp } from '@/plugins/appBackup'
+import { loadDigestUpdates, loadHealth, loadIgnoredUpdates, updateApp } from '@/plugins/appBackup'
 
 const SYNCTHING_STORE_ID = 74
 
@@ -266,6 +266,8 @@ export default {
 			// Atrio: app name -> a newer image is available
 			updates: {},
 			ignoredUpdates: [],
+			// Atrio: how each app is doing, from the server (atrio-alerts)
+			health: {},
 			user_id: localStorage.getItem('user_id'),
 			appList: [],
 			oldAppList: [],
@@ -549,6 +551,7 @@ export default {
 				const apps = Object.entries(res.data.data || {})
 				// Atrio: apps on "latest" get theirs from the digests the server checks every 6 hours
 				const digests = await loadDigestUpdates()
+				this.health = await loadHealth()
 				// Apps whose updates were set to be ignored show no badge
 				const ignored = await loadIgnoredUpdates()
 				this.ignoredUpdates = ignored

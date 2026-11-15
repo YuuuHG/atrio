@@ -2,6 +2,16 @@
 
 What changes in each Atrio release. The section for a version is also the text of its GitHub release.
 
+## 0.1.20 — unreleased
+
+**New**
+
+- **App health.** Every 5 minutes the server looks at each app: one that keeps restarting, stopped on its own, fails
+  its own health check, or runs while its page does not answer at all (a login page or an error page are fine) gets
+  a red label on its tile, an entry in Activity and, if you want, a push alert, and another one when it works again.
+  It counts once it is seen twice in a row, so restarts and updates are not taken for a problem, and an app stopped
+  by you is not one. The alert can be turned off in the push alert settings, under "Apps that stop working".
+
 ## 0.1.19 — 2026-11-15
 
 **New**

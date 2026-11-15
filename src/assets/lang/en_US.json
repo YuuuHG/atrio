@@ -907,5 +907,12 @@
   "Going back": "Going back",
   "The services on the server (updates, backups, push alerts) are older than this version, so some features do not work yet. Run this command once on the server; after that, updates bring them too:": "The services on the server (updates, backups, push alerts) are older than this version, so some features do not work yet. Run this command once on the server; after that, updates bring them too:",
   "The services on the server need the install command once more": "The services on the server need the install command once more",
-  "They are older than Atrio {version}, so backups, push alerts and safe updates may not work. Run this on the server, once: {command}": "They are older than Atrio {version}, so backups, push alerts and safe updates may not work. Run this on the server, once: {command}"
+  "They are older than Atrio {version}, so backups, push alerts and safe updates may not work. Run this on the server, once: {command}": "They are older than Atrio {version}, so backups, push alerts and safe updates may not work. Run this on the server, once: {command}",
+  "Apps that stop working, and when they are back": "Apps that stop working, and when they are back",
+  "Keeps restarting": "Keeps restarting",
+  "Stopped on its own": "Stopped on its own",
+  "Not healthy": "Not healthy",
+  "Not answering": "Not answering",
+  "{app} is not working: {detail}": "{app} is not working: {detail}",
+  "{app} is working again": "{app} is working again"
 }

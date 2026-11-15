@@ -14,6 +14,13 @@ import { backupRun, setIgnoreUpdates, updateApp } from '@/plugins/appBackup'
 // The update ring, the same size as the install one
 const PULL_RADIUS = 30
 const PULL_CIRCUMFERENCE = 2 * Math.PI * PULL_RADIUS
+// Atrio: what the tile says about an app that is not well (see atrio-alerts)
+const UNWELL = {
+  'restarting': 'Keeps restarting',
+  'crashed': 'Stopped on its own',
+  'unhealthy': 'Not healthy',
+  'no-answer': 'Not answering',
+}
 // Atrio: the steps of an update run by the server (atrio-backup update-app): ring position and label
 const SERVER_UPDATE_STEPS = {
   preparing: [5, 'Saving a backup'],
@@ -48,6 +55,11 @@ export default {
     updatesIgnored: {
       type: Boolean,
       default: false,
+    },
+    // Atrio: how the app is doing, from the server: restarting, crashed, unhealthy or no-answer when not well
+    health: {
+      type: String,
+      default: '',
     },
     // Atrio: download progress (0-100) of an update or new settings, null when nothing is downloading
     pullProgress: {
@@ -117,6 +129,9 @@ export default {
     pullOffset() {
       return PULL_CIRCUMFERENCE * (1 - Math.min(100, Math.max(0, this.progress || 0)) / 100)
     },
+    unwell() {
+      return Boolean(UNWELL[this.health])
+    },
     backingUp() {
       return backupRun.app === this.item.name && backupRun.action !== 'scan' && backupRun.action !== 'check-updates'
     },
@@ -126,6 +141,7 @@ export default {
       if (this.isCheckThenUpdate && this.pullProgress === null) return this.$t('Checking for updates…')
       if (this.isPulling) return this.pullProgress < 100 ? `${this.$t('Downloading')} ${this.pullProgress}%` : this.$t('Updating')
       if (this.item.app_type === 'system' || !this.item.status) return ''
+      if (this.unwell) return this.$t(UNWELL[this.health])
       if (this.isStopped) return this.$t('Stopped')
       if (this.updateAvailable) return this.$t('Update available')
       return ''
@@ -133,6 +149,7 @@ export default {
     statusClass() {
       if (this.backingUp || this.isPulling) return 'is-busy is-pill'
       if (this.item.app_type === 'system' || !this.item.status) return 'is-invisible'
+      if (this.unwell) return 'is-down is-pill'
       if (this.isStopped) return 'is-stopped is-pill'
       if (this.updateAvailable) return 'is-update is-pill'
       return 'is-running is-quiet'
@@ -1437,6 +1454,15 @@ export default {
 			border-bottom: 0.45rem solid var(--atrio-accent);
 			border-left: 0.3rem solid transparent;
 			background: none;
+		}
+	}
+
+	&.is-down {
+		color: #fecaca;
+
+		.atrio-app-dot {
+			border-radius: 50%;
+			background: #f87171;
 		}
 	}
 

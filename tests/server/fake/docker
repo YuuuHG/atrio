@@ -83,6 +83,9 @@ def matches(container, labels):
 def inspect_container(c, fmt, state):
     if '.Mounts' in fmt:
         return ''.join(m + '\n' for m in c['mounts'])
+    if '.State.OOMKilled' in fmt:
+        health = c.get('health', 'none')
+        return f"{c['state']} {c.get('exit', 0)} {str(c.get('oom', False)).lower()} {health} {c.get('restarts', 0)} /{c['id']}\n"
     if '.State.Status' in fmt:
         status = c['state']
         return f"{status} {1 if status == 'restarting' else 0} {3 if status == 'restarting' else 0}\n"

@@ -259,6 +259,11 @@ export async function loadDigestUpdates() {
 	return (await readJson(`${STATE}/updates.json`))?.apps || {}
 }
 
+/** How each app is doing, from atrio-alerts every 5 minutes: { [app]: { state, since, detail } }. */
+export async function loadHealth() {
+	return (await readJson(`${STATE}/health.json`))?.apps || {}
+}
+
 /** The apps whose updates are not shown: they can still be updated by hand. */
 export async function loadIgnoredUpdates() {
 	return (await readJson(`${STATE}/updates.json`))?.ignored || []
