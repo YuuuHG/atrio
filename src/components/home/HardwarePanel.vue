@@ -4,8 +4,13 @@
 import { discoverSensors, readLive, readStatic } from '@/plugins/hardware'
 import { restoreFocus, trapTab } from '@/plugins/focusTrap'
 import { renderSize } from '@/mixins/file_utils'
+import { ice_i18n } from '@/mixins/base/common-i18n'
+import { loadAppUsage, loadHistory } from '@/plugins/history'
+import HistoryChart from '@/components/home/HistoryChart.vue'
 
 const POLL_MS = 3000
+// Two series: validated for colour blindness on the panel's dark surface (dataviz validator)
+const COLORS = ['#0aa5c4', '#8b5cf6']
 // SMART data of the disks, read every hour by atrio-alerts on the server
 const DISKS = '/var/lib/casaos/atrio/disks.json'
 const VERDICTS = { good: 'Good', watch: 'Keep an eye on it', replace: 'Replace soon', unknown: 'No SMART data' }
@@ -44,6 +49,7 @@ function storedUnit() {
 export default {
 	name: 'HardwarePanel',
 	compatConfig: { MODE: 3 },
+	components: { HistoryChart },
 	data() {
 		return {
 			open: false,
@@ -54,6 +60,12 @@ export default {
 			unit: '°C',
 			// null while loading, false without the service on the server
 			disks: null,
+			range: 24,
+			// null while loading, false when the server keeps no history
+			history: null,
+			appUsage: [],
+			appTitles: {},
+			colors: COLORS,
 		}
 	},
 	computed: {
@@ -91,6 +103,7 @@ export default {
 			this.unit = storedUnit()
 			this.$nextTick(() => this.$refs.sheet?.focus())
 			this.loadDisks()
+			this.loadHistory()
 			// Machine details and the sensor list are read once per page load
 			if (!this.info) {
 				this.loading = true
@@ -122,6 +135,36 @@ export default {
 			finally {
 				this.polling = false
 			}
+		},
+		async loadHistory() {
+			const rows = await loadHistory(this.range)
+			this.history = rows === null ? false : rows
+			this.appUsage = await loadAppUsage()
+			if (this.appUsage.length && !Object.keys(this.appTitles).length) {
+				try {
+					const grid = (await this.$openAPI.appGrid.getAppGrid()).data.data || []
+					this.appTitles = Object.fromEntries(grid.map((app) => [app.name, typeof app.title === 'object' ? ice_i18n(app.title) : app.title || app.name]))
+				}
+				catch (e) {
+					// The app's own name then
+				}
+			}
+		},
+		setRange(hours) {
+			this.range = hours
+			this.loadHistory()
+		},
+		column(key) {
+			return (this.history || []).map((row) => row[key])
+		},
+		percent(value) {
+			return `${Math.round(value)}%`
+		},
+		rate(value) {
+			return `${renderSize(value)}/s`
+		},
+		degrees(value) {
+			return this.temperature(value)
 		},
 		async loadDisks() {
 			try {
@@ -299,6 +342,35 @@ export default {
 							</p>
 						</section>
 
+						<section v-if="history !== false">
+							<div class="atrio-hardware-section-head">
+								<h3>{{ $t('History') }}</h3>
+								<div :aria-label="$t('Period')" class="atrio-segmented is-small" role="radiogroup">
+									<button v-for="hours in [24, 168]" :key="hours" :aria-checked="range === hours" :class="{ 'is-active': range === hours }" role="radio" type="button" @click="setRange(hours)">
+										{{ hours === 24 ? $t('24 hours') : $t('7 days') }}
+									</button>
+								</div>
+							</div>
+							<p v-if="history === null" class="atrio-hardware-muted">{{ $t('Loading…') }}</p>
+							<template v-else>
+								<HistoryChart :format="percent" :max="100" :series="[{ label: 'CPU', color: colors[0], values: column('cpu') }]" :times="column('time')" :title="$t('Processor')" />
+								<HistoryChart :format="percent" :max="100" :series="[{ label: $t('Memory'), color: colors[0], values: column('memory') }]" :times="column('time')" :title="$t('Memory')" />
+								<HistoryChart :format="rate" :min="1024" :series="[{ label: $t('Received'), color: colors[0], values: column('down') }, { label: $t('Sent'), color: colors[1], values: column('up') }]" :times="column('time')" :title="$t('Network')" />
+								<HistoryChart :format="degrees" :min="50" :series="[{ label: $t('Processor'), color: colors[0], values: column('cpuTemp') }, { label: $t('Disks'), color: colors[1], values: column('diskTemp') }]" :times="column('time')" :title="$t('Temperatures')" />
+							</template>
+							<template v-if="appUsage.length">
+								<h4 class="atrio-hardware-apps-title">{{ $t('Apps now') }}</h4>
+								<ul class="atrio-hardware-apps">
+									<li v-for="item in appUsage" :key="item.app">
+										<span class="atrio-hardware-label">{{ appTitles[item.app] || item.app }}</span>
+										<span class="atrio-hardware-app-bar"><span :style="{ width: `${Math.min(100, item.memory / appUsage[0].memory * 100)}%` }" /></span>
+										<span class="atrio-hardware-value">{{ renderSize(item.memory * 1048576) }} · {{ item.cpu.toFixed(1) }}% CPU</span>
+									</li>
+								</ul>
+							</template>
+						</section>
+						<p v-else class="atrio-hardware-muted">{{ $t('Charts of the last days need the latest version of the service on the server. Run the install command once more.') }}</p>
+
 						<section v-if="disks?.length">
 							<h3>{{ $t('Disks') }}</h3>
 							<div v-for="disk in disks" :key="disk.device" class="atrio-hardware-disk">
@@ -435,6 +507,42 @@ export default {
 .atrio-hardware-value {
 	font-variant-numeric: tabular-nums;
 	font-weight: 600;
+}
+
+.atrio-hardware-apps-title {
+	margin: 0.5rem 0 0.375rem;
+	color: var(--atrio-text);
+	font-size: 0.8125rem;
+	font-weight: 600;
+}
+
+.atrio-hardware-apps {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+
+	li {
+		display: grid;
+		grid-template-columns: minmax(6rem, 1fr) 4rem auto;
+		gap: 0.75rem;
+		align-items: center;
+		padding: 0.25rem 0;
+		font-size: 0.8125rem;
+	}
+}
+
+.atrio-hardware-app-bar {
+	height: 6px;
+	overflow: hidden;
+	border-radius: 3px;
+	background: rgba(255, 255, 255, 0.08);
+
+	span {
+		display: block;
+		height: 100%;
+		border-radius: 3px;
+		background: #0aa5c4;
+	}
 }
 
 .atrio-hardware-disk {

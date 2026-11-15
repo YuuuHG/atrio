@@ -5,6 +5,11 @@
 set -uo pipefail
 
 TESTS=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# Numbers written the Italian way (12,5), when that language is installed: the services must not
+# depend on the server's language (awk and smartctl follow it)
+if locale -a 2>/dev/null | grep -qi '^it_IT\.utf-\?8$'; then
+	export LC_ALL=it_IT.UTF-8
+fi
 SCRIPTS=$(cd "$TESTS/../../scripts" && pwd)
 PASSED=0
 FAILED=0

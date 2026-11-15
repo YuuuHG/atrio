@@ -957,5 +957,16 @@
   "Processor hot above": "Processore caldo oltre i",
   "The disk limit goes from 50 to 99%, the processor from 60 to 110 °C.": "La soglia del disco va dal 50 al 99%, quella del processore da 60 a 110 °C.",
   "Apps without alerts": "App senza avvisi",
-  "Their installs, updates and problems are still in Activity and on their tiles.": "Installazioni, aggiornamenti e problemi di queste app restano comunque in Attività e sui loro riquadri."
+  "Their installs, updates and problems are still in Activity and on their tiles.": "Installazioni, aggiornamenti e problemi di queste app restano comunque in Attività e sui loro riquadri.",
+  "History": "Storico",
+  "Period": "Periodo",
+  "24 hours": "24 ore",
+  "7 days": "7 giorni",
+  "Upload": "Upload",
+  "Apps now": "App adesso",
+  "Charts of the last days need the latest version of the service on the server. Run the install command once more.": "I grafici degli ultimi giorni hanno bisogno dell'ultima versione del servizio sul server. Esegui di nuovo il comando di installazione.",
+  "No data yet: the server adds a point every 5 minutes.": "Ancora nessun dato: il server aggiunge un punto ogni 5 minuti.",
+  "min {min}, average {average}, max {max}": "minimo {min}, media {average}, massimo {max}",
+  "Received": "Ricevuti",
+  "Sent": "Inviati"
 }

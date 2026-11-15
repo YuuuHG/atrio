@@ -166,7 +166,9 @@ def main(args):
         labels = filters(args)
         everything = '-a' in args or '-aq' in args
         found = [c for c in state['containers'] if matches(c, labels) and (everything or c['state'] in ('running', 'restarting'))]
-        if '--format' in args:
+        if '--format' in args and 'Label' in args[args.index('--format') + 1]:
+            out.write(''.join(f"{c['id']}\t{c['project']}\n" for c in found))
+        elif '--format' in args:
             out.write(''.join(c['ref'] + '\n' for c in found))
         else:
             out.write(''.join(c['id'] + '\n' for c in found))
@@ -194,6 +196,11 @@ def main(args):
             return 1
         state['images'].remove(image)
         save(state)
+        return 0
+    if args[:1] == ['stats']:
+        for c in state['containers']:
+            if c['state'] == 'running':
+                out.write(f"{c['id']}\t{c.get('cpu', 1.5)}%\t{c.get('mem', 100)}MiB / 15.39GiB\n")
         return 0
     if args[:1] == ['info']:
         out.write(DIR + '\n')

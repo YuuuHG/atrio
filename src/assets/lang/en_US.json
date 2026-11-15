@@ -957,5 +957,16 @@
   "Processor hot above": "Processor hot above",
   "The disk limit goes from 50 to 99%, the processor from 60 to 110 °C.": "The disk limit goes from 50 to 99%, the processor from 60 to 110 °C.",
   "Apps without alerts": "Apps without alerts",
-  "Their installs, updates and problems are still in Activity and on their tiles.": "Their installs, updates and problems are still in Activity and on their tiles."
+  "Their installs, updates and problems are still in Activity and on their tiles.": "Their installs, updates and problems are still in Activity and on their tiles.",
+  "History": "History",
+  "Period": "Period",
+  "24 hours": "24 hours",
+  "7 days": "7 days",
+  "Upload": "Upload",
+  "Apps now": "Apps now",
+  "Charts of the last days need the latest version of the service on the server. Run the install command once more.": "Charts of the last days need the latest version of the service on the server. Run the install command once more.",
+  "No data yet: the server adds a point every 5 minutes.": "No data yet: the server adds a point every 5 minutes.",
+  "min {min}, average {average}, max {max}": "min {min}, average {average}, max {max}",
+  "Received": "Received",
+  "Sent": "Sent"
 }

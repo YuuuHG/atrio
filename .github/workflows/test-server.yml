@@ -20,5 +20,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check the syntax of every script
         run: for f in scripts/*.sh scripts/atrio-update scripts/atrio-alerts scripts/atrio-backup scripts/atrio-setup; do bash -n "$f"; done
+      - name: Add the Italian language, so the tests also run with 12,5 for 12.5
+        run: sudo locale-gen it_IT.UTF-8
       - name: Run the tests
         run: bash tests/server/run.sh

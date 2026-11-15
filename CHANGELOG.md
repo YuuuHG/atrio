@@ -2,6 +2,15 @@
 
 What changes in each Atrio release. The section for a version is also the text of its GitHub release.
 
+## 0.1.21 — unreleased
+
+**New**
+
+- **Charts of the last 24 hours and 7 days**, in the hardware panel: processor, memory, network received and sent,
+  and the temperatures of the processor and the hottest disk, with the values at any time on hover and gaps where
+  the server was off. Below them, how much memory and CPU each app uses now. The server keeps a point every 5
+  minutes for a week, also with push alerts off, counting only the real network cards (not Docker's bridges).
+
 ## 0.1.20 — 2026-11-15
 
 **New**

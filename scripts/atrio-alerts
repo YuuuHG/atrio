@@ -13,6 +13,7 @@ TEST_REQUEST="$STATE/alerts-test"
 APPS="${ATRIO_APPS:-/var/lib/casaos/apps}"
 WWW="${ATRIO_WWW:-/var/lib/casaos/www}"
 SYS="${ATRIO_SYS:-/sys}"
+PROC="${ATRIO_PROC:-/proc}"
 REPO="peppeaiello/atrio"
 MODE="${1:-}"
 
@@ -516,6 +517,79 @@ check_app_updates() {
 	done
 }
 
+# --- History -----------------------------------------------------------------------------------
+
+# One sample every run (5 minutes) for the charts of the hardware panel, kept for 7 days:
+# "time cpu% memory% load download upload cpu°C disk°C", CPU and memory in tenths of a percent,
+# network in bytes per second averaged over the 5 minutes. Apps (CPU and memory each) for 24 hours.
+HISTORY="$STATE/history.tsv"
+APPS_HISTORY="$STATE/history-apps.tsv"
+
+record_history() {
+	local now line user nice system idle iowait irq softirq steal total busy previous cpu="" total_mem available mem=""
+	local load rx=0 tx=0 iface down="" up="" since temp disk_temp=""
+	now=$(date +%s)
+	read -r _ user nice system idle iowait irq softirq steal _ < "$PROC/stat" || return 0
+	total=$((user + nice + system + idle + iowait + irq + softirq + steal))
+	busy=$((total - idle - iowait))
+	previous=$(memory_get history_cpu)
+	if [ -n "$previous" ] && [ "$total" -gt "${previous%% *}" ]; then
+		cpu=$(( (busy - ${previous##* }) * 1000 / (total - ${previous%% *}) ))
+	fi
+	memory_set history_cpu "$total $busy"
+	total_mem=$(awk '/^MemTotal:/ { print $2 }' "$PROC/meminfo")
+	available=$(awk '/^MemAvailable:/ { print $2 }' "$PROC/meminfo")
+	[ -n "$total_mem" ] && [ "$total_mem" -gt 0 ] && mem=$(( (total_mem - available) * 1000 / total_mem ))
+	load=$(cut -d' ' -f1 "$PROC/loadavg" 2>/dev/null)
+	# Real network cards only: Docker's bridges and veths would count the same bytes twice
+	for iface in "$SYS"/class/net/*; do
+		[ -e "$iface/device" ] || continue
+		rx=$((rx + $(cat "$iface/statistics/rx_bytes" 2>/dev/null || echo 0)))
+		tx=$((tx + $(cat "$iface/statistics/tx_bytes" 2>/dev/null || echo 0)))
+	done
+	previous=$(memory_get history_net)
+	if [ -n "$previous" ]; then
+		read -r since line <<< "$previous"
+		local prx="${line%% *}" ptx="${line##* }"
+		if [ "$now" -gt "$since" ] && [ "$rx" -ge "$prx" ] && [ "$tx" -ge "$ptx" ]; then
+			down=$(( (rx - prx) / (now - since) ))
+			up=$(( (tx - ptx) / (now - since) ))
+		fi
+	fi
+	memory_set history_net "$now $rx $tx"
+	temp=$(cpu_temperature)
+	[ "${temp:-0}" -gt 0 ] || temp=""
+	[ -f "$DISKS_TSV" ] && disk_temp=$(sed -n 's/.*|TEMP=\([0-9]*\)|.*/\1/p' "$DISKS_TSV" | sort -n | tail -n 1)
+	printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$now" "$cpu" "$mem" "$load" "$down" "$up" "$temp" "$disk_temp" >> "$HISTORY"
+	keep_since "$HISTORY" $((now - 7 * 86400))
+	record_apps "$now"
+}
+
+# CPU and memory of each app, from docker stats, summed over its containers
+record_apps() {
+	command -v docker >/dev/null || return 0
+	local now="$1" projects
+	projects=$(timeout 20 docker ps --format '{{.ID}}	{{.Label "com.docker.compose.project"}}' 2>/dev/null)
+	[ -n "$projects" ] || return 0
+	# In C: in other languages awk reads 12.5 as 12 and writes 12,5
+	timeout 30 docker stats --no-stream --format '{{.ID}}	{{.CPUPerc}}	{{.MemUsage}}' 2>/dev/null | LC_ALL=C awk -F'\t' -v now="$now" -v projects="$projects" '
+		BEGIN { n = split(projects, rows, "\n"); for (i = 1; i <= n; i++) { split(rows[i], f, "\t"); app[f[1]] = f[2] } }
+		function mib(s,   v) { v = s + 0; if (s ~ /GiB/) v *= 1024; else if (s ~ /KiB/) v /= 1024; else if (s ~ /[0-9]B/ && s !~ /iB/) v /= 1048576; return v }
+		{
+			name = app[$1]; if (name == "") next
+			cpu[name] += $2 + 0
+			split($3, used, " / "); mem[name] += mib(used[1])
+		}
+		END { for (name in cpu) printf "%s\t%s\t%.1f\t%.0f\n", now, name, cpu[name], mem[name] }' >> "$APPS_HISTORY"
+	keep_since "$APPS_HISTORY" $((now - 86400))
+	chmod 644 "$HISTORY" "$APPS_HISTORY" 2>/dev/null
+}
+
+# Drops the lines of a history file older than $2 (first column, seconds)
+keep_since() {
+	awk -F'\t' -v since="$2" '$1 >= since' "$1" > "$1.tmp" && mv "$1.tmp" "$1"
+}
+
 # --- App health ---------------------------------------------------------------------------------
 
 HEALTH_JSON="$STATE/health.json"
@@ -710,6 +784,7 @@ fi
 
 if [ "$ENABLED" != 1 ] || ! configured; then
 	# Keep the app list current, so turning alerts on later does not announce every app or update
+	record_history
 	SEND_APPS=0 check_apps
 	SEND_APPS=0 check_app_updates
 	# The tiles show how apps are doing, and the hardware panel the disks, also with alerts off
@@ -719,6 +794,7 @@ if [ "$ENABLED" != 1 ] || ! configured; then
 	exit 0
 fi
 
+record_history
 [ "$DISK" = 1 ] && check_disks
 if [ "$HEALTH" = 1 ]; then check_disk_health; else SEND_HEALTH=0 check_disk_health; fi
 [ "$TEMP" = 1 ] && check_temperature
