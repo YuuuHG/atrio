@@ -15,6 +15,9 @@ What changes in each Atrio release. The section for a version is also the text o
   few seconds while it is open) or over the last 24 hours. The totals on top, a bar with each app's share, and a list
   with each app's own icon. Apps with their own network are counted exactly; apps on the server's network, like
   Home Assistant, and the services are counted from their TCP connections.
+- **The home's widgets show more.** Storage shows the disks' SMART verdict (Good, Keep an eye on it, Replace soon)
+  instead of CasaOS's pass or fail, with each disk's model, temperature and wear; a click opens them in the hardware
+  panel. Network Status shows the app that used the network most in the last 5 minutes, with its icon.
 
 ## 0.1.20 — 2026-11-15
 

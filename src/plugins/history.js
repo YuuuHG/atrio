@@ -114,3 +114,16 @@ export async function loadDayTraffic() {
 		server,
 	}
 }
+
+/** The app with the most traffic in the last sample (5 minutes), or null: { app, down, up } */
+export async function loadBusiestApp() {
+	const text = await read(`${STATE}/history-apps.tsv`)
+	if (!text) return null
+	const rows = text.split('\n').filter(Boolean).map((line) => line.split('\t'))
+	const last = Math.max(...rows.map((row) => Number(row[0]) || 0))
+	const apps = rows.filter((row) => Number(row[0]) === last && !row[1].startsWith('svc:'))
+		.map(([, app, , , down, up]) => ({ app, down: Number(down) || 0, up: Number(up) || 0 }))
+		.sort((a, b) => b.down + b.up - (a.down + a.up))
+	// Below 1 KB/s nothing worth naming is going on
+	return apps[0] && apps[0].down + apps[0].up >= 1024 ? apps[0] : null
+}

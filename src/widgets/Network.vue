@@ -42,6 +42,17 @@
 					</div>
 					<Sparkline :capacity="60" :values="downHistory" color="#6EE7B7" />
 				</div>
+				<!-- Atrio: the app that used the network most in the last 5 minutes (atrio-alerts) -->
+				<div v-if="busiest" class="atrio-network-busiest">
+					<img v-if="busiestIcon" :src="busiestIcon" alt="" @error="busiestIcon = ''">
+					<b-icon v-else icon="application-outline" pack="mdi" size="is-16" />
+					<span class="atrio-network-busiest-name">{{ busiestTitle }}</span>
+					<span class="atrio-network-busiest-rate">
+						<b-icon icon="arrow-down" pack="mdi" size="is-12" />{{ renderSize(busiest.down) }}/s
+						<b-icon icon="arrow-up" pack="mdi" size="is-12" />{{ renderSize(busiest.up) }}/s
+					</span>
+				</div>
+				<p v-if="busiest" class="atrio-network-busiest-note">{{ $t('Most active app in the last 5 minutes') }}</p>
 			</div>
 		</div>
 	</div>
@@ -49,6 +60,8 @@
 
 <script>
 import Sparkline from '@/components/widgets/Sparkline.vue'
+import { ice_i18n } from '@/mixins/base/common-i18n'
+import { loadBusiestApp } from '@/plugins/history'
 import { mixin } from '@/mixins/mixin';
 
 export default {
@@ -68,7 +81,18 @@ export default {
 			networks: [],
 			currentUpSpeed: 0,
 			currentDownSpeed: 0,
+			// Atrio: the app with the most traffic, from the server's 5-minute samples
+			busiest: null,
+			busiestTitle: '',
+			busiestIcon: '',
 		}
+	},
+	mounted() {
+		this.loadBusiest()
+		this.busiestTimer = setInterval(this.loadBusiest, 60000)
+	},
+	beforeUnmount() {
+		clearInterval(this.busiestTimer)
 	},
 	created() {
 		this.initNetwork = this.$store.state.hardwareInfo.net
@@ -97,6 +121,21 @@ export default {
 	},
 
 	methods: {
+		async loadBusiest() {
+			const busiest = await loadBusiestApp()
+			if (busiest && busiest.app !== this.busiest?.app) {
+				try {
+					const app = ((await this.$openAPI.appGrid.getAppGrid()).data.data || []).find((item) => item.name === busiest.app)
+					this.busiestTitle = app ? (typeof app.title === 'object' ? ice_i18n(app.title) : app.title || busiest.app) : busiest.app
+					this.busiestIcon = app?.icon || ''
+				}
+				catch (e) {
+					this.busiestTitle = busiest.app
+					this.busiestIcon = ''
+				}
+			}
+			this.busiest = busiest
+		},
 		buildDatas(data) {
 			if (data.length == 0) {
 				return
@@ -289,5 +328,68 @@ export default {
 	&:hover {
 		background: rgba(255, 255, 255, 0.04);
 	}
+}
+
+// The detail button, like the hardware button of the System Status widget
+.atrio-widget-button {
+	display: grid;
+	place-items: center;
+	padding: 0;
+	border: 0;
+	border-radius: 0.375rem;
+	background: transparent;
+	color: inherit;
+	cursor: pointer;
+
+	&:hover {
+		background: rgba(255, 255, 255, 0.1);
+	}
+}
+
+.atrio-network-busiest {
+	display: flex;
+	gap: 0.5rem;
+	align-items: center;
+	margin-top: 0.625rem;
+	padding-top: 0.625rem;
+	border-top: 1px solid rgba(255, 255, 255, 0.08);
+	font-size: 0.8125rem;
+
+	img,
+	.icon {
+		flex: none;
+		width: 1.25rem;
+		height: 1.25rem;
+		border-radius: 0.375rem;
+		object-fit: cover;
+	}
+}
+
+.atrio-network-busiest-name {
+	min-width: 0;
+	overflow: hidden;
+	color: var(--atrio-text);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.atrio-network-busiest-rate {
+	flex: none;
+	margin-left: auto;
+	color: var(--atrio-text-soft);
+	font-variant-numeric: tabular-nums;
+
+	.icon {
+		width: auto;
+		height: auto;
+		margin: 0 0.125rem 0 0.375rem;
+		color: var(--atrio-text-muted);
+	}
+}
+
+.atrio-network-busiest-note {
+	margin-top: 0.125rem;
+	color: var(--atrio-text-muted);
+	font-size: 0.6875rem;
 }
 </style>

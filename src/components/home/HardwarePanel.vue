@@ -96,7 +96,9 @@ export default {
 	},
 	methods: {
 		renderSize,
-		async show() {
+		// `section`: 'disks' scrolls to the disks once they are there
+		async show(section) {
+			if (section === 'disks') this.scrollToDisks = true
 			if (this.open) return
 			this.returnFocus = document.activeElement
 			this.open = true
@@ -111,8 +113,10 @@ export default {
 				this.info = info
 				this.groups = groups
 				this.loading = false
+				this.revealDisks()
 			}
 			await this.poll()
+			this.revealDisks()
 			clearInterval(this.timer)
 			if (this.open) this.timer = setInterval(this.poll, POLL_MS)
 		},
@@ -139,6 +143,7 @@ export default {
 		async loadHistory() {
 			const rows = await loadHistory(this.range)
 			this.history = rows === null ? false : rows
+			this.revealDisks()
 			this.appUsage = await loadAppUsage()
 			if (this.appUsage.length && !Object.keys(this.appTitles).length) {
 				try {
@@ -174,6 +179,13 @@ export default {
 			catch (e) {
 				this.disks = false
 			}
+			this.revealDisks()
+		},
+		// Once the charts above them are there too, so that nothing moves the disks after the scroll
+		revealDisks() {
+			if (!this.scrollToDisks || !this.info || !this.live || this.disks === null || this.history === null) return
+			this.scrollToDisks = false
+			this.$nextTick(() => setTimeout(() => this.$refs.disks?.scrollIntoView({ block: 'start' }), 150))
 		},
 		verdict(disk) {
 			return this.$t(VERDICTS[disk.verdict] || VERDICTS.unknown)
@@ -371,7 +383,7 @@ export default {
 						</section>
 						<p v-else class="atrio-hardware-muted">{{ $t('Charts of the last days need the latest version of the service on the server. Run the install command once more.') }}</p>
 
-						<section v-if="disks?.length">
+						<section v-if="disks?.length" ref="disks">
 							<h3>{{ $t('Disks') }}</h3>
 							<div v-for="disk in disks" :key="disk.device" class="atrio-hardware-disk">
 								<div class="atrio-hardware-disk-head">

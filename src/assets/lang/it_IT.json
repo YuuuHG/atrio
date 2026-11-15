@@ -985,5 +985,9 @@
   "{count} more apps with no traffic": "Altre {count} app senza traffico",
   "Apps on the server's own network and the server's services are counted from their TCP connections only. Traffic between apps, for example through a reverse proxy, counts for both.": "Le app sulla rete del server e i servizi del server sono contati solo dalle loro connessioni TCP. Il traffico tra app, ad esempio attraverso un reverse proxy, conta per entrambe.",
   "Measured every few seconds while this is open.": "Misurato ogni pochi secondi finché questo pannello è aperto.",
-  "Windows network discovery": "Rilevamento rete Windows"
+  "Windows network discovery": "Rilevamento rete Windows",
+  "Most active app in the last 5 minutes": "App più attiva negli ultimi 5 minuti",
+  "{n} disk | {n} disks": "{n} disco | {n} dischi",
+  "Disk health details": "Dettagli sulla salute dei dischi",
+  "wear {n}%": "usura {n}%"
 }
