@@ -278,6 +278,9 @@ check_disks() {
 
 DISKS_JSON="$STATE/disks.json"
 DISKS_TSV="$STATE/disks.tsv"
+# Each disk's temperature at each hourly check, for a week: "time<tab>disk<tab>°C", the disk by its
+# serial number (device names can change after a reboot)
+DISKS_HISTORY="$STATE/history-disks.tsv"
 
 # The SMART data of one disk as KEY=value lines, from smartctl's text output (ATA, SAT and NVMe)
 smart_values() {
@@ -381,10 +384,15 @@ check_disk_health() {
 	[ -n "$last" ] && [ $((now - last)) -lt 3600 ] && [ -f "$DISKS_JSON" ] && return 0
 	memory_set disks_checked "$now"
 	touch "$DISKS_TSV"
+	DISKS_TIME=$now
 	while read -r device _ type _; do
 		[[ "$device" =~ ^/dev/[A-Za-z0-9/_-]+$ ]] && [[ "$type" =~ ^[A-Za-z0-9,_+-]+$ ]] || continue
 		read_disk "$device" "$type" && [ "$SELFTEST" = 1 ] && schedule_selftest "$device" "$type"
 	done < <(LC_ALL=C timeout 60 smartctl --scan-open 2>/dev/null | grep -v '^#')
+	if [ -f "$DISKS_HISTORY" ]; then
+		keep_since "$DISKS_HISTORY" $((now - 7 * 86400))
+		chmod 644 "$DISKS_HISTORY"
+	fi
 	write_disks
 }
 
@@ -417,6 +425,11 @@ read_disk() {
 		if [ "${SEND_HEALTH:-1}" = 1 ]; then
 			send "$(text health_title)" "$(text "disk_$verdict" "$device ($(smart_get "$values" MODEL))")" "$([ "$verdict" = replace ] && echo 5 || echo 4)" "rotating_light"
 		fi
+	fi
+	# Only on the hourly check, so the points are evenly spaced
+	line=$(smart_get "$values" TEMP)
+	if [ -n "${DISKS_TIME:-}" ] && [[ "$line" =~ ^[0-9]+$ ]]; then
+		printf '%s\t%s\t%s\n' "$DISKS_TIME" "$DISK_ID" "$line" >> "$DISKS_HISTORY"
 	fi
 	# A self-test that finished since the last look goes to the activity log (a failed one also
 	# turns the verdict to replace, which sends the alert above)

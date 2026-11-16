@@ -67,6 +67,46 @@ function withGaps(rows, step) {
 	return out
 }
 
+/**
+ * Each disk's temperature over the last `hours`, one point an hour: { times, disks: { id: [°C | null] } },
+ * the disk by its serial number as atrio-alerts writes it. Null with an older service.
+ */
+export async function loadDiskTemps(hours) {
+	const text = await read(`${STATE}/history-disks.tsv`)
+	if (text === null) return null
+	const since = Date.now() / 1000 - hours * 3600
+	const points = new Map()
+	const ids = new Set()
+	for (const line of text.split('\n')) {
+		const [time, id, temp] = line.split('\t')
+		const at = number(time)
+		const value = number(temp)
+		if (!at || at < since || !id || value === null) continue
+		if (!points.has(at)) points.set(at, {})
+		points.get(at)[id] = value
+		ids.add(id)
+	}
+	const times = []
+	const disks = Object.fromEntries([...ids].map((id) => [id, []]))
+	let previous = 0
+	for (const time of [...points.keys()].sort((a, b) => a - b)) {
+		// A gap where the server was off or the disks slept for more than 3 hours
+		if (previous && time - previous > 3 * 3600) {
+			times.push(previous + 3600)
+			for (const id of ids) disks[id].push(null)
+		}
+		times.push(time)
+		for (const id of ids) disks[id].push(points.get(time)[id] ?? null)
+		previous = time
+	}
+	return { times, disks }
+}
+
+/** The key atrio-alerts gives a disk: its serial number (or device) with only letters and digits. */
+export function diskId(disk) {
+	return String(disk.serial || disk.device || '').replace(/[^A-Za-z0-9]/g, '_')
+}
+
 /** Each app's CPU (% of one core) and memory (MiB) in the last sample: [{ app, cpu, memory }] */
 export async function loadAppUsage() {
 	const text = await read(`${STATE}/history-apps.tsv`)

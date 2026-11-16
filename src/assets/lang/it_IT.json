@@ -1018,5 +1018,7 @@
   "{kind} self-test of {device} passed": "Test {kind} di {device} superato",
   "{kind} self-test of {device} failed": "Test {kind} di {device} fallito",
   "{kind} self-test of {device} stopped before the end": "Test {kind} di {device} interrotto prima della fine",
-  "Test running": "Test in corso"
+  "Test running": "Test in corso",
+  "Disk temperatures, last 24 hours": "Temperature dei dischi, ultime 24 ore",
+  "Disk temperatures, last 7 days": "Temperature dei dischi, ultimi 7 giorni"
 }

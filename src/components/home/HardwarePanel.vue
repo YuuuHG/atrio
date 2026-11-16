@@ -5,13 +5,15 @@ import { discoverSensors, readLive, readStatic } from '@/plugins/hardware'
 import { restoreFocus, trapTab } from '@/plugins/focusTrap'
 import { renderSize } from '@/mixins/file_utils'
 import { ice_i18n } from '@/mixins/base/common-i18n'
-import { loadAppUsage, loadHistory } from '@/plugins/history'
+import { diskId, loadAppUsage, loadDiskTemps, loadHistory } from '@/plugins/history'
 import HistoryChart from '@/components/home/HistoryChart.vue'
 import { startDiskTest } from '@/plugins/appBackup'
 
 const POLL_MS = 3000
 // Two series: validated for colour blindness on the panel's dark surface (dataviz validator)
 const COLORS = ['#0aa5c4', '#8b5cf6']
+// Up to four disks, validated the same way; more disks share the last, muted colour
+const DISK_COLORS = ['#0aa5c4', '#8b5cf6', '#d97706', '#db2777']
 // SMART data of the disks, read every hour by atrio-alerts on the server
 const DISKS = '/var/lib/casaos/atrio/disks.json'
 // SELFTEST=0 there turns the scheduled self-tests off
@@ -67,6 +69,8 @@ export default {
 			range: 24,
 			// null while loading, false when the server keeps no history
 			history: null,
+			// Each disk's temperature, hourly: { times, disks: { id: [°C] } }, null without it
+			diskTemps: null,
 			appUsage: [],
 			appTitles: {},
 			colors: COLORS,
@@ -149,8 +153,9 @@ export default {
 			}
 		},
 		async loadHistory() {
-			const rows = await loadHistory(this.range)
+			const [rows, diskTemps] = await Promise.all([loadHistory(this.range), loadDiskTemps(this.range)])
 			this.history = rows === null ? false : rows
+			this.diskTemps = diskTemps
 			this.revealDisks()
 			this.appUsage = await loadAppUsage()
 			if (this.appUsage.length && !Object.keys(this.appTitles).length) {
@@ -166,6 +171,17 @@ export default {
 		setRange(hours) {
 			this.range = hours
 			this.loadHistory()
+		},
+		// One line per disk that has points, named by its model (and device when two share it)
+		diskTempSeries() {
+			if (!this.diskTemps || this.diskTemps.times.length < 2 || !this.disks) return []
+			const models = this.disks.map((disk) => disk.model)
+			return this.disks.filter((disk) => this.diskTemps.disks[diskId(disk)]?.some((value) => value !== null))
+				.map((disk, index) => ({
+					label: models.filter((model) => model === disk.model).length > 1 ? `${disk.model} (${disk.device})` : disk.model || disk.device,
+					color: DISK_COLORS[index] || '#475569',
+					values: this.diskTemps.disks[diskId(disk)],
+				}))
 		},
 		column(key) {
 			return (this.history || []).map((row) => row[key])
@@ -506,6 +522,9 @@ export default {
 									</button>
 								</div>
 							</div>
+							<div v-if="diskTempSeries().length" class="atrio-hardware-disk-chart">
+								<HistoryChart :format="degrees" :min="50" :series="diskTempSeries()" :times="diskTemps.times" :title="range > 24 ? $t('Disk temperatures, last 7 days') : $t('Disk temperatures, last 24 hours')" />
+							</div>
 							<p class="atrio-hardware-muted">{{ $t('Read from SMART every hour, without waking disks that sleep. A disk that gets worse sends a push alert.') }}</p>
 							<label v-if="disks.some(canTest)" class="atrio-hardware-autotest">
 								<input :checked="autoTests" :disabled="savingAutoTests" type="checkbox" @change="setAutoTests($event.target.checked)">
@@ -699,6 +718,10 @@ export default {
 		background: rgba(248, 113, 113, 0.18);
 		color: #fecaca;
 	}
+}
+
+.atrio-hardware-disk-chart {
+	margin-top: 0.75rem;
 }
 
 .atrio-hardware-disk-actions {

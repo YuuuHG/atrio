@@ -1018,5 +1018,7 @@
   "{kind} self-test of {device} passed": "{kind} self-test of {device} passed",
   "{kind} self-test of {device} failed": "{kind} self-test of {device} failed",
   "{kind} self-test of {device} stopped before the end": "{kind} self-test of {device} stopped before the end",
-  "Test running": "Test running"
+  "Test running": "Test running",
+  "Disk temperatures, last 24 hours": "Disk temperatures, last 24 hours",
+  "Disk temperatures, last 7 days": "Disk temperatures, last 7 days"
 }

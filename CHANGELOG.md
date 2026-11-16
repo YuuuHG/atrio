@@ -22,6 +22,8 @@ What changes in each Atrio release. The section for a version is also the text o
   every month, at night, or at any hour once two days late; the disk runs it on its own and keeps working. The
   hardware panel shows the latest result and a test in progress, and has buttons to start one now. A failed test
   turns the disk to Replace soon and sends the alert. They can be turned off below the disks.
+- **Each disk's temperature over time**, in the hardware panel below the disks: one line per disk for the last 24
+  hours or 7 days, from the hourly SMART reading, with gaps while a disk sleeps.
 
 ## 0.1.20 — 2026-11-15
 

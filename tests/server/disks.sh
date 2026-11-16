@@ -29,6 +29,8 @@ check "a hard disk is read" is "$(disk /dev/sda kind) $(disk /dev/sda temp) $(di
 check "a healthy hard disk is good" is "$(disk /dev/sda verdict)" good
 check "an SSD's wear comes from its wear attribute" is "$(disk /dev/sdb kind) $(disk /dev/sdb used) $(disk /dev/sdb temp)" "ssd 5 33"
 
+check "each disk's temperature is kept, by serial number" is "$(cut -f2,3 "$ATRIO_STATE/history-disks.tsv" | tr '\t\n' ': ')" "2345E6789ABC:41 WD_WCC7K1234567:32 S6PWNX0R123456:33 "
+check "the history can be read by the web UI" is "$(stat -c %a "$ATRIO_STATE/history-disks.tsv")" 644
 alerts
 check "the disks are not read again within the hour" is "$(grep -c 'smartctl -n standby' "$FAKE_DOCKER/calls.log")" 3
 
@@ -53,12 +55,20 @@ sed 's/^SMART overall-health self-assessment test result: .*/SMART overall-healt
 again
 check "a disk that fails its own test" is "$(disk /dev/sdb verdict) $(disk /dev/sdb reasons)" "replace failed"
 
+check "a point each hour" is "$(grep -c 2345E6789ABC "$ATRIO_STATE/history-disks.tsv")" 6
+check "with the temperature of that hour" is "$(tail -n 3 "$ATRIO_STATE/history-disks.tsv" | grep 2345E6789ABC | cut -f3)" 74
+# Points older than a week go
+sed -i "1s/^[0-9]*/$(($(date +%s) - 8 * 86400))/" "$ATRIO_STATE/history-disks.tsv"
+again
+check "a week of history is kept" is "$(grep -c 2345E6789ABC "$ATRIO_STATE/history-disks.tsv")" 6
+
 # A sleeping disk is not woken up: it keeps the data of its last check
 rm "$FAKE_DOCKER/smart-sdb"
 touch "$FAKE_DOCKER/asleep-sdb"
 again
 check "a sleeping disk keeps its last data" is "$(disk /dev/sdb verdict)" replace
 check "smartctl is asked not to wake it" has "$FAKE_DOCKER/calls.log" "smartctl -n standby"
+check "and no temperature is made up for it" is "$(tail -n 2 "$ATRIO_STATE/history-disks.tsv" | grep -c S6PWNX0R123456)" 0
 
 # With alerts off the hardware panel still gets the data, and nothing is sent
 sed -i 's/^ENABLED=1/ENABLED=0/' "$ATRIO_STATE/alerts.conf"
