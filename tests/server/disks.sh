@@ -4,7 +4,8 @@
 . "$(dirname "$0")/lib.sh"
 sandbox
 printf '/dev/nvme0 nvme\n/dev/sda sat\n/dev/sdb sat\n' > "$FAKE_DOCKER/disks"
-printf 'ENABLED=1\nSERVICE=ntfy\nURL=https://ntfy.example\nTOPIC=t\nDISK=0\nTEMP=0\nAPPS=0\nAPP_UPDATES=0\nUPDATES=0\nAPP_DOWN=0\n' > "$ATRIO_STATE/alerts.conf"
+printf 'ENABLED=1\nSERVICE=ntfy\nURL=https://ntfy.example\nTOPIC=t\nDISK=0\nTEMP=0\nAPPS=0\nAPP_UPDATES=0\nUPDATES=0\nAPP_DOWN=0\nSELFTEST=0\n' > "$ATRIO_STATE/alerts.conf"
+# Self-tests have their own file (selftest.sh): here they would make the disks be read every 5 minutes
 alerts() { bash "$SCRIPTS/atrio-alerts" >/dev/null 2>&1; }
 # disk DEVICE FIELD: a value of disks.json
 disk() { python3 -c 'import json, sys; print(next(d for d in json.load(open(sys.argv[1]))["disks"] if d["device"] == sys.argv[2]).get(sys.argv[3], ""))' "$ATRIO_STATE/disks.json" "$1" "$2"; }
