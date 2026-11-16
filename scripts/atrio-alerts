@@ -31,6 +31,8 @@ ENABLED=0 SERVICE=ntfy URL="https://ntfy.sh" TOPIC="" TOKEN="" LANGUAGE=en
 DISK=1 HEALTH=1 TEMP=1 APPS_CHANGES=1 APP_UPDATES=1 UPDATES=1 APP_DOWN=1 DISK_LIMIT=90 TEMP_LIMIT=85
 # Quiet hours hold back what is not urgent until they end; muted apps send nothing (their changes are still logged)
 QUIET=0 QUIET_FROM=23:00 QUIET_TO=07:00 MUTE=""
+# Scheduled SMART self-tests of the disks (they run inside the disk, also with alerts off)
+SELFTEST=1
 QUEUE="$STATE/alerts-queue"
 
 read_conf() {
@@ -39,7 +41,7 @@ read_conf() {
 	while IFS='=' read -r key value; do
 		value="${value%$'\r'}"
 		case "$key" in
-			ENABLED | DISK | HEALTH | TEMP | APPS | APP_UPDATES | UPDATES | APP_DOWN | QUIET)
+			ENABLED | DISK | HEALTH | TEMP | APPS | APP_UPDATES | UPDATES | APP_DOWN | QUIET | SELFTEST)
 				[[ "$value" =~ ^[01]$ ]] || continue
 				[ "$key" = APPS ] && key=APPS_CHANGES
 				printf -v "$key" '%s' "$value" ;;
@@ -295,8 +297,27 @@ smart_values() {
 		/^Power On Hours:/ { hours = num(after($0)) }
 		/^Media and Data Integrity Errors:/ { media = num(after($0)) }
 		/^NVMe Version:|^Model Number:/ { kind = "nvme" }
+		# Self-tests: whether the disk can run them, the one running now and the latest result
+		/^Optional Admin Commands/ { selftest = ($0 ~ /Self_Test/) ? "yes" : "no" }
+		/^[ \t]*Self-test supported\./ { selftest = "yes" }
+		/No Self-test supported/ { selftest = "no" }
+		/^Self-test execution status:/ { ata_status = ($0 ~ /in progress/) }
+		ata_status && /% of test remaining/ { match($0, /[0-9]+%/); running = 100 - substr($0, RSTART, RLENGTH - 1); ata_status = 0 }
+		/^Self-test status:/ && /in progress/ && !/No self-test/ { running = 0; if (match($0, /[0-9]+% completed/)) running = substr($0, RSTART, RLENGTH - 11) + 0 }
+		/^Num  *Test_Description/ { in_log = 1; next }
+		in_log && /^$/ { in_log = 0 }
+		in_log && test == "" && (/^# *[0-9][0-9]* / || /^ *[0-9][0-9]* /) && !/in progress/ {
+			row = $0
+			sub(/^#? *[0-9][0-9]*  */, "", row)
+			n = split(row, f, /   */)
+			test_kind = (f[1] ~ /^Short/) ? "short" : (f[1] ~ /^Extended/) ? "long" : "other"
+			test = (f[2] ~ /without error/) ? "passed" : (f[2] ~ /^(Aborted|Interrupted)/) ? "aborted" : "failed"
+			for (i = 3; i <= n; i++) if (f[i] ~ /^[0-9]+$/) { test_hours = f[i]; break }
+		}
+		/^ID#  *ATTRIBUTE_NAME/ { in_attr = 1; next }
+		in_attr && /^$/ { in_attr = 0 }
 		# ATA attributes: ID NAME FLAG VALUE WORST THRESH TYPE UPDATED WHEN_FAILED RAW
-		$1 ~ /^[0-9]+$/ && NF >= 10 {
+		in_attr && $1 ~ /^[0-9]+$/ && NF >= 10 {
 			raw = num($10)
 			if ($1 == 5) realloc = raw
 			else if ($1 == 9) hours = raw
@@ -314,6 +335,7 @@ smart_values() {
 			if (model == "") model = family
 			printf "MODEL=%s\nSERIAL=%s\nSIZE=%s\nKIND=%s\nHEALTH=%s\nCRIT=%s\nTEMP=%s\nUSED=%s\nHOURS=%s\n", model, serial, size, kind, health, crit, temp, used, hours
 			printf "MEDIA=%s\nREALLOC=%s\nPENDING=%s\nUNC=%s\nCRC=%s\n", media, realloc, pending, unc, crc
+			printf "SELFTEST=%s\nRUNNING=%s\nTEST=%s\nTESTKIND=%s\nTESTHOURS=%s\n", selftest, running, test, test_kind, test_hours
 		}'
 }
 
@@ -332,6 +354,7 @@ smart_verdict() {
 	n=$(smart_get "$v" PENDING); [ "${n:-0}" -gt 0 ] && { verdict=replace; add pending; }
 	n=$(smart_get "$v" UNC); [ "${n:-0}" -gt 0 ] && { verdict=replace; add uncorrectable; }
 	n=$(smart_get "$v" MEDIA); [ "${n:-0}" -gt 0 ] && { verdict=replace; add media-errors; }
+	[ "$(smart_get "$v" TEST)" = failed ] && { verdict=replace; add test-failed; }
 	n=$(smart_get "$v" CRIT); [[ "$n" =~ ^0x0*[1-9a-fA-F] ]] && { verdict=replace; add critical-warning; }
 	n=$(smart_get "$v" USED); [ "${n:-0}" -ge 100 ] && { verdict=replace; add worn-out; }
 	n=$(smart_get "$v" REALLOC)
@@ -352,7 +375,7 @@ smart_verdict() {
 # A verdict that gets worse is logged and sent; disks.json is what the hardware panel shows.
 check_disk_health() {
 	command -v smartctl >/dev/null || return 0
-	local now last device type out code values verdict reasons serial key before rank_new rank_old line
+	local now last device type
 	now=$(date +%s)
 	last=$(memory_get disks_checked)
 	[ -n "$last" ] && [ $((now - last)) -lt 3600 ] && [ -f "$DISKS_JSON" ] && return 0
@@ -360,35 +383,104 @@ check_disk_health() {
 	touch "$DISKS_TSV"
 	while read -r device _ type _; do
 		[[ "$device" =~ ^/dev/[A-Za-z0-9/_-]+$ ]] && [[ "$type" =~ ^[A-Za-z0-9,_+-]+$ ]] || continue
-		# In C: in other languages smartctl writes 1.234 for 1,234 and the numbers would be cut
-		out=$(LC_ALL=C timeout 60 smartctl -n standby -i -H -A -d "$type" "$device" 2>/dev/null)
-		code=$?
-		# Asleep: the data of the last check stay
-		[ $((code & 2)) -ne 0 ] && printf '%s' "$out" | grep -qi standby && continue
-		values=$(printf '%s\n' "$out" | smart_values)
-		line=$(smart_verdict "$values")
-		verdict="${line%%$'\t'*}"
-		reasons="${line#*$'\t'}"
-		serial=$(smart_get "$values" SERIAL)
-		key="disk_verdict_$(printf '%s' "${serial:-$device}" | tr -c 'A-Za-z0-9' '_')"
-		before=$(memory_get "$key")
-		memory_set "$key" "$verdict"
-		rank_new=$(case "$verdict" in watch) echo 1 ;; replace) echo 2 ;; *) echo 0 ;; esac)
-		rank_old=$(case "$before" in watch) echo 1 ;; replace) echo 2 ;; *) echo 0 ;; esac)
-		if [ -n "$before" ] && [ "$rank_new" -gt "$rank_old" ]; then
-			log_activity disk-health error "" "$verdict $device $reasons"
-			if [ "${SEND_HEALTH:-1}" = 1 ]; then
-				send "$(text health_title)" "$(text "disk_$verdict" "$device ($(smart_get "$values" MODEL))")" "$([ "$verdict" = replace ] && echo 5 || echo 4)" "rotating_light"
-			fi
-		fi
-		{
-			awk -F'\t' -v d="$device" '$1 != d' "$DISKS_TSV"
-			# "-" for no reasons: read splits on tabs and would skip an empty field
-			printf '%s\t%s\t%s\t%s\t%s\n' "$device" "$verdict" "${reasons:--}" "$(date -Iseconds)" "$(printf '%s' "$values" | tr '\n' '|')"
-		} > "$DISKS_TSV.tmp"
-		mv "$DISKS_TSV.tmp" "$DISKS_TSV"
+		read_disk "$device" "$type" && [ "$SELFTEST" = 1 ] && schedule_selftest "$device" "$type"
 	done < <(LC_ALL=C timeout 60 smartctl --scan-open 2>/dev/null | grep -v '^#')
 	write_disks
+}
+
+# One disk: its SMART data and self-tests, the verdict, and its line in disks.tsv. Fails when it sleeps.
+# DISK_VALUES and DISK_ID are left for the self-tests.
+read_disk() {
+	local device="$1" type="$2" out code values verdict reasons serial key before rank_new rank_old line seen result
+	# WAKE=1 when asked from the panel: the test would wake the disk anyway
+	local standby=(-n standby)
+	[ "${WAKE:-0}" = 1 ] && standby=()
+	# In C: in other languages smartctl writes 1.234 for 1,234 and the numbers would be cut
+	out=$(LC_ALL=C timeout 60 smartctl "${standby[@]}" -i -H -A -c -l selftest -d "$type" "$device" 2>/dev/null)
+	code=$?
+	# Asleep: the data of the last check stay
+	[ $((code & 2)) -ne 0 ] && printf '%s' "$out" | grep -qi standby && return 1
+	values=$(printf '%s\n' "$out" | smart_values)
+	line=$(smart_verdict "$values")
+	verdict="${line%%$'\t'*}"
+	reasons="${line#*$'\t'}"
+	serial=$(smart_get "$values" SERIAL)
+	DISK_ID=$(printf '%s' "${serial:-$device}" | tr -c 'A-Za-z0-9' '_')
+	DISK_VALUES="$values"
+	key="disk_verdict_$DISK_ID"
+	before=$(memory_get "$key")
+	memory_set "$key" "$verdict"
+	rank_new=$(case "$verdict" in watch) echo 1 ;; replace) echo 2 ;; *) echo 0 ;; esac)
+	rank_old=$(case "$before" in watch) echo 1 ;; replace) echo 2 ;; *) echo 0 ;; esac)
+	if [ -n "$before" ] && [ "$rank_new" -gt "$rank_old" ]; then
+		log_activity disk-health error "" "$verdict $device $reasons"
+		if [ "${SEND_HEALTH:-1}" = 1 ]; then
+			send "$(text health_title)" "$(text "disk_$verdict" "$device ($(smart_get "$values" MODEL))")" "$([ "$verdict" = replace ] && echo 5 || echo 4)" "rotating_light"
+		fi
+	fi
+	# A self-test that finished since the last look goes to the activity log (a failed one also
+	# turns the verdict to replace, which sends the alert above)
+	result=$(smart_get "$values" TEST)
+	if [ -n "$result" ]; then
+		line="$(smart_get "$values" TESTKIND) $(smart_get "$values" TESTHOURS) $result"
+		seen=$(memory_get "test_seen_$DISK_ID")
+		memory_set "test_seen_$DISK_ID" "$line"
+		if [ -n "$seen" ] && [ "$seen" != "$line" ]; then
+			log_activity disk-test "$([ "$result" = failed ] && echo error || echo ok)" "" "$(smart_get "$values" TESTKIND) $result $device"
+		fi
+	fi
+	{
+		awk -F'\t' -v d="$device" '$1 != d' "$DISKS_TSV"
+		# "-" for no reasons: read splits on tabs and would skip an empty field
+		printf '%s\t%s\t%s\t%s\t%s\n' "$device" "$verdict" "${reasons:--}" "$(date -Iseconds)" "$(printf '%s' "$values" | tr '\n' '|')"
+	} > "$DISKS_TSV.tmp"
+	mv "$DISKS_TSV.tmp" "$DISKS_TSV"
+}
+
+# Self-tests the disk runs on its own while it keeps working: a short one (a couple of minutes) each
+# week and a long one (a full read, hours on a big disk) each month, at night when possible. The
+# first long test comes a week after Atrio first sees the disk, not on every disk on day one.
+SHORT_EVERY=$((7 * 86400)) LONG_EVERY=$((30 * 86400))
+schedule_selftest() {
+	local device="$1" type="$2" now hour short long kind="" every last late
+	[ "$(smart_get "$DISK_VALUES" SELFTEST)" = yes ] || return 0
+	[ -z "$(smart_get "$DISK_VALUES" RUNNING)" ] || return 0
+	now=$(date +%s)
+	hour=${ATRIO_HOUR:-$(date +%-H)}
+	short=$(memory_get "test_short_$DISK_ID")
+	long=$(memory_get "test_long_$DISK_ID")
+	if [ -z "$long" ]; then
+		long=$((now - LONG_EVERY + 7 * 86400))
+		memory_set "test_long_$DISK_ID" "$long"
+	fi
+	if [ $((now - long)) -ge "$LONG_EVERY" ]; then
+		kind=long every=$LONG_EVERY last=$long
+	elif [ -z "$short" ] || [ $((now - short)) -ge "$SHORT_EVERY" ]; then
+		kind=short every=$SHORT_EVERY last=${short:-0}
+	fi
+	[ -n "$kind" ] || return 0
+	# From 1 to 6 in the morning, or at any hour once two days late (a server off at night)
+	late=0
+	[ "$last" -gt 0 ] && [ $((now - last)) -ge $((every + 2 * 86400)) ] && late=1
+	[ "$last" = 0 ] && late=1
+	[ "$hour" -ge 1 ] && [ "$hour" -le 6 ] || [ "$late" = 1 ] || return 0
+	start_selftest "$device" "$type" "$kind"
+}
+
+# Started both on schedule and from the hardware panel; remembered even when it fails, so a disk
+# that refuses is not asked again every hour
+start_selftest() {
+	local device="$1" type="$2" kind="$3" now
+	now=$(date +%s)
+	memory_set "test_${kind}_$DISK_ID" "$now"
+	# A long test reads everything a short one does
+	[ "$kind" = long ] && memory_set "test_short_$DISK_ID" "$now"
+	if LC_ALL=C timeout 60 smartctl -t "$kind" -d "$type" "$device" >/dev/null 2>&1; then
+		log_activity disk-test ok "" "$kind started $device"
+		return 0
+	fi
+	log_activity disk-test error "" "$kind not-started $device"
+	return 1
 }
 
 write_disks() {
@@ -920,6 +1012,25 @@ configured() {
 read_conf
 REQUEST_TOKEN=""
 trim_activity
+
+# From the hardware panel, through atrio-backup: a self-test now on one disk smartctl lists
+if [ "$MODE" = "--disk-test" ]; then
+	command -v smartctl >/dev/null || exit 1
+	[[ "$3" =~ ^(short|long)$ ]] || exit 1
+	while read -r device _ type _; do
+		[ "$device" = "$2" ] && [[ "$type" =~ ^[A-Za-z0-9,_+-]+$ ]] || continue
+		touch "$DISKS_TSV"
+		WAKE=1 read_disk "$device" "$type" || exit 1
+		[ -n "$(smart_get "$DISK_VALUES" RUNNING)" ] && exit 2
+		start_selftest "$device" "$type" "$3" || exit 1
+		# Read again so the panel shows it running
+		sleep "${ATRIO_TEST_WAIT:-2}"
+		WAKE=1 read_disk "$device" "$type"
+		write_disks
+		exit 0
+	done < <(LC_ALL=C timeout 60 smartctl --scan-open 2>/dev/null | grep -v '^#')
+	exit 1
+fi
 
 if [ "$MODE" = "--network" ]; then
 	command -v docker >/dev/null && measure_network

@@ -1,7 +1,8 @@
 #!/bin/sh
 # A stand-in for smartctl in the tests: --scan-open lists the disks in $FAKE_DOCKER/disks (one
 # "device type" per line), and a disk's data are fake/smart/<name>, its file name in disks/<name>.
-# A disk whose $FAKE_DOCKER/asleep-<name> exists answers like a sleeping one.
+# A disk whose $FAKE_DOCKER/asleep-<name> exists answers like a sleeping one (unless it is not asked
+# to stay asleep).
 here=$(dirname "$0")
 if [ "$1" = "--scan-open" ]; then
 	while read -r device type; do echo "$device -d $type # $device"; done < "$FAKE_DOCKER/disks"
@@ -10,7 +11,13 @@ fi
 for last; do :; done
 name=$(basename "$last")
 echo "smartctl $*" >> "$FAKE_DOCKER/calls.log"
-if [ -e "$FAKE_DOCKER/asleep-$name" ]; then
+# -t short|long: started, unless $FAKE_DOCKER/refuse-<name> exists
+if [ "$1" = "-t" ]; then
+	[ -e "$FAKE_DOCKER/refuse-$name" ] && { echo "Command not supported"; exit 4; }
+	echo "Testing has begun."
+	exit 0
+fi
+if [ -e "$FAKE_DOCKER/asleep-$name" ] && [ "$1" = "-n" ]; then
 	echo "Device is in STANDBY mode, exit(2)"
 	exit 2
 fi

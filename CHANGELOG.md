@@ -18,6 +18,10 @@ What changes in each Atrio release. The section for a version is also the text o
 - **The home's widgets show more.** Storage shows the disks' SMART verdict (Good, Keep an eye on it, Replace soon)
   instead of CasaOS's pass or fail, with each disk's model, temperature and wear; a click opens them in the hardware
   panel. Network Status shows the app that used the network most in the last 5 minutes, with its icon.
+- **Disk self-tests.** The server has each disk run a short SMART self-test every week and a long one (a full read)
+  every month, at night, or at any hour once two days late; the disk runs it on its own and keeps working. The
+  hardware panel shows the latest result and a test in progress, and has buttons to start one now. A failed test
+  turns the disk to Replace soon and sends the alert. They can be turned off below the disks.
 
 ## 0.1.20 — 2026-11-15
 

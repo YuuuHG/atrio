@@ -17,6 +17,7 @@ const ACTIONS = {
 	'app-down': ['alert-circle-outline', '{app} is not working: {detail}', '{app} is not working: {detail}'],
 	'app-up': ['check-circle-outline', '{app} is working again'],
 	'disk-health': ['harddisk', '{detail}', '{detail}'],
+	'disk-test': ['harddisk', '{detail}', '{detail}'],
 	'update-app': ['arrow-up-circle-outline', '{app} was updated to a newer image of the same version, after a backup', '{app} was not updated: {detail}'],
 	'backup': ['archive-outline', 'Backup of {app} ({detail})', 'Backup of {app} failed: {detail}'],
 	'restore': ['backup-restore', '{app} went back to a backup', 'Restore of {app} failed: {detail}'],
@@ -109,6 +110,18 @@ export default {
 				case 'disk-health': return words[0] === 'replace'
 					? this.$t('Disk {device} may fail soon: back up its data and plan to replace it', { device: words[1] })
 					: this.$t('Disk {device} shows the first signs of trouble', { device: words[1] })
+				case 'disk-test': {
+					// "short started /dev/sda", "long failed /dev/sda"
+					const kind = words[0] === 'long' ? 'Long' : 'Short'
+					const text = {
+						'started': '{kind} self-test started on {device}',
+						'not-started': '{device} did not start a {kind} self-test',
+						'passed': '{kind} self-test of {device} passed',
+						'failed': '{kind} self-test of {device} failed',
+						'aborted': '{kind} self-test of {device} stopped before the end',
+					}[words[1]]
+					return text ? this.$t(text, { kind: this.$t(kind).toLowerCase(), device: words[2] }).replace(/^./, (c) => c.toUpperCase()) : event.detail
+				}
 				case 'app-down': {
 					const what = { 'restarting': 'Keeps restarting', 'crashed': 'Stopped on its own', 'unhealthy': 'Not healthy', 'no-answer': 'Not answering' }[words[0]]
 					return what ? this.$t(what).toLowerCase() + (words[0] === 'crashed' && words[1] ? ` (${words[1]})` : '') : event.detail

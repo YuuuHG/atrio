@@ -29,6 +29,8 @@ const DEFAULTS = {
 	QUIET_FROM: '23:00',
 	QUIET_TO: '07:00',
 	MUTE: '',
+	// Set from the hardware panel, kept here so that saving the alerts does not drop it
+	SELFTEST: '1',
 }
 
 function randomTopic() {

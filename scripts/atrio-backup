@@ -41,6 +41,7 @@ ACTION="" APP="" ID="" REASON="manual" TOKEN="" DEST="$DEFAULT_DEST" DEST_MOUNT=
 EVERY="" AT="" DAY="" KEEP="" PASSWORD="" REPLACE_KEY=0
 IMAGES_CHOSEN=()
 IGNORE=""
+DEVICE="" KIND=""
 # "service=image" for an update to the App Store's version, and set while going back after one
 NEW_IMAGES=()
 ROLLBACK=0
@@ -168,12 +169,14 @@ read_request() {
 			REPLACE_KEY) [ "$value" = 1 ] && REPLACE_KEY=1 ;;
 			IMAGE) [[ "$value" =~ ^sha256:[0-9a-f]{64}$ ]] && IMAGES_CHOSEN+=("$value") ;;
 			IGNORE) [[ "$value" =~ ^[01]$ ]] && IGNORE="$value" ;;
+			DEVICE) [[ "$value" =~ ^/dev/[A-Za-z0-9/_-]+$ ]] && DEVICE="$value" ;;
+			KIND) [[ "$value" =~ ^(short|long)$ ]] && KIND="$value" ;;
 			SET_IMAGE) [[ "$value" =~ ^[A-Za-z0-9._-]+=[a-z0-9][a-z0-9._/:@-]*$ ]] && NEW_IMAGES+=("$value") ;;
 		esac
 	done < "$REQUEST"
 	rm -f "$REQUEST"
 	case "$ACTION" in
-		scan|backup|restore|delete|destination|forget|schedule|export-settings|import-settings|images|remove-images|check-updates|update-app|ignore-updates|network) ;;
+		scan|backup|restore|delete|destination|forget|schedule|export-settings|import-settings|images|remove-images|check-updates|update-app|ignore-updates|network|disk-test) ;;
 		*) ACTION=""; APP=""; ID=""; fail "Unknown request" ;;
 	esac
 	if ! [[ "$APP" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]]; then
@@ -1605,5 +1608,16 @@ case "$ACTION" in
 		"$(dirname "$0")/atrio-alerts" --network >/dev/null 2>&1 || bash "$(dirname "$0")/atrio-alerts" --network >/dev/null 2>&1
 		[ -s "$STATE/network.json" ] || fail "The network could not be measured"
 		write_status done "" ""
+		;;
+	disk-test)
+		# Started by atrio-alerts, which reads the disks every hour and finds the result afterwards
+		[ -n "$DEVICE" ] && [ -n "$KIND" ] || fail "Unknown disk"
+		write_status running starting
+		bash "$(dirname "$0")/atrio-alerts" --disk-test "$DEVICE" "$KIND" >/dev/null 2>&1
+		case $? in
+			0) write_status done "" "" ;;
+			2) fail "A test is already running on this disk" ;;
+			*) fail "The disk did not start the test" ;;
+		esac
 		;;
 esac

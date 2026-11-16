@@ -7,15 +7,19 @@ import { renderSize } from '@/mixins/file_utils'
 import { ice_i18n } from '@/mixins/base/common-i18n'
 import { loadAppUsage, loadHistory } from '@/plugins/history'
 import HistoryChart from '@/components/home/HistoryChart.vue'
+import { startDiskTest } from '@/plugins/appBackup'
 
 const POLL_MS = 3000
 // Two series: validated for colour blindness on the panel's dark surface (dataviz validator)
 const COLORS = ['#0aa5c4', '#8b5cf6']
 // SMART data of the disks, read every hour by atrio-alerts on the server
 const DISKS = '/var/lib/casaos/atrio/disks.json'
+// SELFTEST=0 there turns the scheduled self-tests off
+const ALERTS_CONF = '/var/lib/casaos/atrio/alerts.conf'
 const VERDICTS = { good: 'Good', watch: 'Keep an eye on it', replace: 'Replace soon', unknown: 'No SMART data' }
 const REASONS = {
 	'failed': 'The disk says its own health check failed.',
+	'test-failed': 'Its latest self-test failed.',
 	'pending': 'Some sectors could not be read and wait to be replaced: this often comes before a failure.',
 	'uncorrectable': 'Errors the disk could not correct.',
 	'media-errors': 'Data integrity errors.',
@@ -66,6 +70,10 @@ export default {
 			appUsage: [],
 			appTitles: {},
 			colors: COLORS,
+			// The device a self-test is being started on
+			testing: '',
+			autoTests: true,
+			savingAutoTests: false,
 		}
 	},
 	computed: {
@@ -180,6 +188,77 @@ export default {
 				this.disks = false
 			}
 			this.revealDisks()
+			if (this.disks) this.loadAutoTests()
+		},
+		async loadAutoTests() {
+			try {
+				const res = await this.$api.file.getContent(ALERTS_CONF)
+				this.autoTests = !(res.data.success === 200 && /^SELFTEST=0$/m.test(res.data.data || ''))
+			}
+			catch (e) {
+				this.autoTests = true
+			}
+		},
+		// Only this line of alerts.conf changes; the push alert settings keep theirs
+		async setAutoTests(on) {
+			this.savingAutoTests = true
+			try {
+				const res = await this.$api.file.getContent(ALERTS_CONF)
+				const exists = res.data.success === 200
+				const lines = (exists ? res.data.data || '' : '').split('\n').filter((line) => line && !line.startsWith('SELFTEST='))
+				lines.push(`SELFTEST=${on ? 1 : 0}`)
+				if (!exists) await this.$api.file.create(ALERTS_CONF)
+				const saved = await this.$api.file.update(ALERTS_CONF, `${lines.join('\n')}\n`)
+				if (saved.data.success !== 200) throw new Error('save')
+				this.autoTests = on
+			}
+			catch (e) {
+				this.$buefy.toast.open({ message: this.$t('Could not save the setting'), type: 'is-danger' })
+			}
+			this.savingAutoTests = false
+		},
+		canTest(disk) {
+			return disk.selftest === 'yes'
+		},
+		isRunning(disk) {
+			return disk.running !== undefined && disk.running !== ''
+		},
+		// "Short, passed · 3 days ago", from the disk's own power-on hours
+		testText(disk) {
+			if (this.isRunning(disk)) {
+				return Number(disk.running) > 0 ? this.$t('Running, {n}% done', { n: disk.running }) : this.$t('Test running')
+			}
+			if (!disk.test) return this.$t('None yet')
+			const kind = { short: this.$t('Short'), long: this.$t('Long') }[disk.testkind] || this.$t('Other')
+			const result = { passed: this.$t('passed'), failed: this.$t('failed'), aborted: this.$t('stopped before the end') }[disk.test] || disk.test
+			const hours = Number(disk.hours) - Number(disk.testhours)
+			let when = ''
+			if (disk.testhours !== '' && hours >= 0) {
+				when = hours < 24 ? this.$t('today') : this.$t('{n} days ago', { n: Math.floor(hours / 24) })
+			}
+			return [`${kind}, ${result}`, when].filter(Boolean).join(' · ')
+		},
+		runTest(disk, kind) {
+			const start = async () => {
+				this.testing = disk.device
+				try {
+					await startDiskTest(disk.device, kind)
+					this.$buefy.toast.open({ message: this.$t('Test started: the result shows here when it ends.'), type: 'is-success' })
+				}
+				catch (e) {
+					this.$buefy.toast.open({ message: this.$t(e.message || 'The disk did not start the test'), type: 'is-danger' })
+				}
+				this.testing = ''
+				this.loadDisks()
+			}
+			if (kind === 'short') return start()
+			this.$buefy.dialog.confirm({
+				title: this.$t('Start a long test?'),
+				message: this.$t('It reads the whole disk and can take hours on a big one. The disk keeps working meanwhile, a little slower.'),
+				confirmText: this.$t('Start'),
+				cancelText: this.$t('Cancel'),
+				onConfirm: start,
+			})
 		},
 		// Once the charts above them are there too, so that nothing moves the disks after the scroll
 		revealDisks() {
@@ -406,6 +485,10 @@ export default {
 										<dt>{{ $t('Wear') }}</dt>
 										<dd>{{ disk.used }}%</dd>
 									</template>
+									<template v-if="canTest(disk) || disk.test">
+										<dt>{{ $t('Self-test') }}</dt>
+										<dd>{{ testText(disk) }}</dd>
+									</template>
 									<template v-for="counter in counters(disk)" :key="counter.key">
 										<dt>{{ counter.label }}</dt>
 										<dd>{{ counter.value }}</dd>
@@ -414,8 +497,20 @@ export default {
 								<ul v-if="reasons(disk).length" class="atrio-hardware-reasons">
 									<li v-for="reason in reasons(disk)" :key="reason">{{ reason }}</li>
 								</ul>
+								<div v-if="canTest(disk)" class="atrio-hardware-disk-actions">
+									<button :disabled="!!testing || isRunning(disk)" class="atrio-config-tag" type="button" @click="runTest(disk, 'short')">
+										{{ testing === disk.device ? $t('Starting…') : $t('Short test') }}
+									</button>
+									<button :disabled="!!testing || isRunning(disk)" class="atrio-config-tag" type="button" @click="runTest(disk, 'long')">
+										{{ $t('Long test') }}
+									</button>
+								</div>
 							</div>
 							<p class="atrio-hardware-muted">{{ $t('Read from SMART every hour, without waking disks that sleep. A disk that gets worse sends a push alert.') }}</p>
+							<label v-if="disks.some(canTest)" class="atrio-hardware-autotest">
+								<input :checked="autoTests" :disabled="savingAutoTests" type="checkbox" @change="setAutoTests($event.target.checked)">
+								<span>{{ $t('Self-tests on their own: a short one each week and a long one each month, at night') }}</span>
+							</label>
 						</section>
 
 						<section v-for="section in sections" :key="section.kind">
@@ -603,6 +698,32 @@ export default {
 	&.is-hot {
 		background: rgba(248, 113, 113, 0.18);
 		color: #fecaca;
+	}
+}
+
+.atrio-hardware-disk-actions {
+	display: flex;
+	gap: 0.5rem;
+	margin-top: 0.625rem;
+
+	button:disabled {
+		opacity: 0.5;
+		cursor: default;
+	}
+}
+
+.atrio-hardware-autotest {
+	display: flex;
+	gap: 0.5rem;
+	align-items: flex-start;
+	margin-top: 0.5rem;
+	color: var(--atrio-text-soft);
+	font-size: 0.8125rem;
+	cursor: pointer;
+
+	input {
+		margin-top: 0.1875rem;
+		accent-color: #0aa5c4;
 	}
 }
 
