@@ -9,7 +9,7 @@ import { mixin } from '@/mixins/mixin'
 import Sparkline from '@/components/widgets/Sparkline.vue'
 import TerminalCard from '@/components/logsAndTerminal/TerminalCard.vue'
 import AppBackups from '@/components/home/AppBackups.vue'
-import { updateApp } from '@/plugins/appBackup'
+import { escapeHtml, updateApp } from '@/plugins/appBackup'
 
 const POLL_MS = 3000
 const HISTORY = 40
@@ -281,9 +281,9 @@ export default {
 			this.busy = status
 			try {
 				await this.$openAPI.appManagement.compose.setComposeAppStatus(this.app.name, status)
-				this.$buefy.toast.open({ message: `${this.title}: ${done}`, type: 'is-success' })
+				this.$buefy.toast.open({ message: `${escapeHtml(this.title)}: ${done}`, type: 'is-success' })
 			} catch (e) {
-				this.$buefy.toast.open({ message: `${this.title}: ${this.$t('the action failed')}`, type: 'is-danger' })
+				this.$buefy.toast.open({ message: `${escapeHtml(this.title)}: ${this.$t('the action failed')}`, type: 'is-danger' })
 			} finally {
 				this.busy = ''
 				await this.loadContainers()
@@ -661,13 +661,23 @@ export default {
 .atrio-sheet-tabs {
 	display: flex;
 	gap: 0.25rem;
+	min-width: 0;
 	padding: 0.25rem;
+	// On a phone five tabs do not fit: they scroll inside the bar instead of widening the panel
+	overflow-x: auto;
+	scrollbar-width: none;
 	border-radius: 0.875rem;
 	background: rgba(255, 255, 255, 0.05);
 	box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 
+	&::-webkit-scrollbar {
+		display: none;
+	}
+
 	button {
-		flex: 1;
+		flex: 1 0 auto;
+		padding: 0 0.625rem;
+		white-space: nowrap;
 		height: 2.25rem;
 		border: 0;
 		border-radius: 0.625rem;

@@ -1020,7 +1020,7 @@ export default {
 
           <p class="mt-3 one-line">
             <span class="one-line atrio-app-name">
-              {{ i18n(item.title) }}
+              {{ title }}
             </span>
           </p>
           <!-- Atrio: quiet status. Only exceptions (stopped, update available) get a visible label -->

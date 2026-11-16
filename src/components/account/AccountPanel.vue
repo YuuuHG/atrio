@@ -178,8 +178,9 @@ export default {
         this.isLoading = false
       }
       catch (error) {
-        console.error(error.response?.data?.message)
         this.isLoading = false
+        // Said on screen, not only in the console
+        this.$buefy.toast.open({ message: this.$t('Update failure'), type: 'is-danger' })
       }
     },
 

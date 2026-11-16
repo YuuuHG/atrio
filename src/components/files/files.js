@@ -125,15 +125,30 @@ export function thumbUrl(path) {
   return `/v1/image?${qs.stringify({ path, token: token(), type: 'thumbnail' })}`
 }
 
-export function download(items) {
-  const single = items.length === 1 && !items[0].is_dir
+function fetchLink(href, name) {
   const link = document.createElement('a')
-  link.href = single ? fileUrl(items[0].path) : zipUrl(items.map(i => i.path))
-  link.download = single ? items[0].name : ''
+  link.href = href
+  link.download = name
   link.rel = 'noopener'
   document.body.appendChild(link)
   link.click()
   link.remove()
+}
+
+// Several items go as one ZIP, whose list of paths CasaOS splits at commas: a file with a comma in
+// its name is downloaded on its own, a folder with one cannot be. Returns the folders left out.
+export function download(items) {
+  if (items.length === 1 && !items[0].is_dir) {
+    fetchLink(fileUrl(items[0].path), items[0].name)
+    return []
+  }
+  const comma = items.filter(i => i.path.includes(','))
+  const zipped = items.filter(i => !i.path.includes(','))
+  for (const item of comma.filter(i => !i.is_dir))
+    fetchLink(fileUrl(item.path), item.name)
+  if (zipped.length)
+    fetchLink(zipped.length === 1 && !zipped[0].is_dir ? fileUrl(zipped[0].path) : zipUrl(zipped.map(i => i.path)), zipped.length === 1 && !zipped[0].is_dir ? zipped[0].name : '')
+  return comma.filter(i => i.is_dir)
 }
 
 /* ------------------------------------------------------------------ server calls */

@@ -2,6 +2,29 @@
 
 What changes in each Atrio release. The section for a version is also the text of its GitHub release.
 
+## 0.1.24 — unreleased
+
+**Fixed**
+
+- **App settings and install:** a port range like 8000-8010 was cut to its last port, or to its first in the
+  Container field, and ports such as 0 or 99999 passed the check; two clicks on Save sent the settings twice; an app
+  in the App Store whose details could not be read left the store under its loading overlay; an error with no answer
+  from the server broke the message instead of showing it.
+- **On a phone** the five tabs of the app panel widened it past the screen; they scroll inside their bar now. The
+  login card of the server's terminal fits a phone too.
+- **Keyboard:** in the file manager, Enter, Space and Backspace on a toolbar button or a Cancel in the upload list
+  went to the list instead of the button; Ctrl+K in a terminal opened the command palette over it; Escape and Tab in
+  the palette also reached a panel open under it.
+- **Home:** a failed first read of the hardware or of the widget layout hid the widgets until a reload; they come
+  back by themselves now, and the saved layout is not written over.
+- **Logs:** switching to another app while the logs of the first were loading left the new ones empty for a few
+  seconds, and an app whose logs cannot be read showed "Loading…" forever.
+- A tile could show no name for an app whose title is missing; a failed save of the account name said nothing;
+  changing CasaOS's port waited forever when CasaOS did not come back on it; a failed try to start an Atrio update
+  could block the next ones; downloading folders whose names have a comma made a broken ZIP, and now says so.
+- App names and messages from the server are shown as text in every message, and a few messages that were only in
+  English are translated, along with "Port" and "Ports", which were swapped in Italian.
+
 ## 0.1.23 — 2026-11-16
 
 **Changed**

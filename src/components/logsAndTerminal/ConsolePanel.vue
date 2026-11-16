@@ -27,7 +27,9 @@ export default {
 			logs: '',
 			logFilter: '',
 			follow: true,
-			loadingLogs: false,
+			// The source whose logs are on their way, '' when none
+			loadingLogs: '',
+			logsFailed: false,
 			// Main container of the selected app, for its terminal
 			container: null,
 			fallbackIcon: this.$asset('@/assets/img/app/default.svg'),
@@ -89,6 +91,7 @@ export default {
 			if (name === this.current) return
 			this.current = name
 			this.logs = ''
+			this.logsFailed = false
 			this.logFilter = ''
 			this.container = null
 			if (this.view === 'terminal' && name !== SERVER) this.view = 'logs'
@@ -107,9 +110,10 @@ export default {
 			}
 		},
 		async loadLogs() {
-			if (this.loadingLogs) return
 			const source = this.current
-			this.loadingLogs = true
+			// One request per source; a new source does not wait for the old one
+			if (this.loadingLogs === source) return
+			this.loadingLogs = source
 			try {
 				let text
 				if (source === SERVER) {
@@ -121,12 +125,14 @@ export default {
 					text = String(res.data.data || '')
 				}
 				if (source !== this.current) return
+				this.logsFailed = false
 				this.logs = text.replace(ANSI, '').replace(/\s+$/, '')
 				if (this.follow) this.scrollToEnd()
 			} catch (e) {
 				// Kept as it was: the next poll tries again
+				if (source === this.current && !this.logs) this.logsFailed = true
 			} finally {
-				this.loadingLogs = false
+				if (this.loadingLogs === source) this.loadingLogs = ''
 			}
 		},
 		scrollToEnd() {
@@ -213,7 +219,7 @@ export default {
 						{{ $t('Download') }}
 					</button>
 				</div>
-				<pre ref="logs" class="atrio-console-logs">{{ shownLogs || (logFilter ? $t('No lines match the filter') : $t('Loading…')) }}</pre>
+				<pre ref="logs" class="atrio-console-logs">{{ shownLogs || (logFilter ? $t('No lines match the filter') : logsFailed ? $t('The logs could not be read: is the app running? Trying again…') : $t('Loading…')) }}</pre>
 			</template>
 
 			<div v-else class="atrio-console-terminal">

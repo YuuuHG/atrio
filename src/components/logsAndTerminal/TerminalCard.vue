@@ -230,6 +230,12 @@ export default {
 		.card-content {
 			padding: 2.5rem;
 			width: 25rem;
+			// The login card of the server's terminal fits a phone
+			max-width: 100%;
+
+			@media (max-width: 480px) {
+				padding: 1.25rem;
+			}
 		}
 
 		&.card-shadow {

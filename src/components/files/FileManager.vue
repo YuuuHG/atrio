@@ -779,8 +779,8 @@ function runAction(id) {
 function downloadItems(list = selectedItems.value) {
   if (!list.length)
     return
-  download(list)
-  notify(t('downloadPreparing'))
+  const skipped = download(list)
+  notify(skipped.length ? t('downloadComma') : t('downloadPreparing'), skipped.length ? 'error' : 'info')
 }
 
 async function copyPath(item) {
@@ -1028,6 +1028,10 @@ function onKeydown(e) {
     }
     return
   }
+  // A real button or link has the focus (toolbar, breadcrumb, an upload's Cancel): Enter, Space and
+  // Backspace are its own, not the list's
+  if (['Enter', ' ', 'Backspace'].includes(e.key) && e.target.closest?.('button:not([tabindex="-1"]), a[href], [role="menuitem"]'))
+    return
   const mod = e.ctrlKey || e.metaKey
   const cols = view.value === 'grid' ? itemsRef.value?.columns() || 1 : 1
   const current = focusIndex.value

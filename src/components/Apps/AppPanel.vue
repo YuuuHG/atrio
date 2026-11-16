@@ -16,6 +16,7 @@ import AppTerminalPanel from './AppTerminalPanel.vue'
 import AppStoreSourceManagement from '@/components/Apps/AppStoreSourceManagement.vue'
 import StoreAppCard from '@/components/Apps/StoreAppCard.vue'
 import { ice_i18n } from '@/mixins/base/common-i18n'
+import { escapeHtml } from '@/plugins/appBackup'
 import AppDetailInfo from '@/components/Apps/AppDetailInfo.vue'
 import ComposeConfig from '@/components/Apps/ComposeConfig.vue'
 import business_OpenThirdApp from '@/mixins/app/Business_OpenThirdApp'
@@ -96,6 +97,7 @@ export default {
       timer: 0,
       data: [],
       isLoading: true,
+      savingSettings: false,
       isFetching: false,
       isLoadError: false,
       loadErrorStep: 0,
@@ -550,13 +552,22 @@ export default {
      */
     async showAppDetial(id) {
       this.isLoading = true
-      let { min_memory, compose } = await this.$openAPI.appManagement.appStore.composeApp(id).then((res) => {
-        // A district that is reserved for resource.
-        return {
-          min_memory: res.data.data.compose.services[id]?.deploy?.resources?.reservations?.memory || '0',
-          compose: res.data.data.compose,
-        }
-      })
+      let min_memory, compose
+      try {
+        ({ min_memory, compose } = await this.$openAPI.appManagement.appStore.composeApp(id).then((res) => {
+          // A district that is reserved for resource.
+          return {
+            min_memory: res.data.data.compose.services?.[id]?.deploy?.resources?.reservations?.memory || '0',
+            compose: res.data.data.compose,
+          }
+        }))
+      }
+      catch (e) {
+        // Without this the store stays under its loading overlay
+        this.isLoading = false
+        this.$buefy.toast.open({ message: escapeHtml(e.response?.data?.message || this.$t('There was an error loading the data, please try again!')), type: 'is-danger' })
+        return
+      }
 
       if (min_memory.includes('GB')) {
         min_memory = min_memory.replace('GB', '') * 1024
@@ -580,8 +591,7 @@ export default {
         })
         .catch((e) => {
           this.$buefy.toast.open({
-            message: e.response.data.message,
-            // message: this.$t(`There was an error loading the data, please try again!`),
+            message: escapeHtml(e.response?.data?.message || this.$t('There was an error loading the data, please try again!')),
             type: 'is-danger',
           })
         })
@@ -727,13 +737,15 @@ export default {
           }
         })
         .catch((e) => {
-          if (e.response.status === 400) {
+          if (e.response?.status === 400) {
             this.dockerComposeConfig = dockerComposeCommands
             this.currentSlide = 1
             this.errInfo = e.response.data.data
           }
+          // The answer can be an object, a text, or nothing at all (no network)
+          const data = e.response?.data
           this.$buefy.toast.open({
-            message: e.response.data || e.response.status,
+            message: escapeHtml(data?.message || (typeof data === 'string' && data) || e.response?.status || this.$t('There was an error installing the application, please try again!')),
             type: 'is-danger',
           })
         })
@@ -770,7 +782,13 @@ export default {
      * @return {*} void
      */
     updateApp() {
+      // Two clicks on Save would send the settings twice
+      if (this.savingSettings)
+        return
+      this.savingSettings = true
       this.$refs.ComposeConfig.checkStep().then((valid) => {
+        if (!valid.every(v => v === true))
+          this.savingSettings = false
         if (valid.every(v => v === true)) {
           this.$openAPI.appManagement.compose
             .applyComposeAppSettings(this.id, this.dockerComposeCommands, false, true)
@@ -790,15 +808,17 @@ export default {
               this.$emit('close')
             })
             .catch((err) => {
-              if (err.response.status === 400) {
-                console.log('Get ERROR:', err.response?.data)
+              if (err.response?.status === 400) {
                 this.errInfo = err.response?.data
               }
               this.$buefy.toast.open({
-                message: err.response?.data?.message,
+                message: escapeHtml(err.response?.data?.message || this.$t('Update failure')),
                 duration: 5000,
                 type: 'is-warning',
               })
+            })
+            .finally(() => {
+              this.savingSettings = false
             })
         }
         else {

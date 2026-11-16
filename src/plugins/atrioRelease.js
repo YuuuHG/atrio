@@ -124,9 +124,10 @@ export async function startUpdate() {
 	const token = `${started.toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 	try {
 		const request = `${STATE}/update-request.tmp`
-		const created = await api.file.create(request)
+		// A copy left by an earlier try that failed halfway is simply written over
+		await api.file.create(request).catch(() => {})
 		const written = await api.file.update(request, token)
-		if (created.data.success !== 200 || written.data.success !== 200) throw new Error('request')
+		if (written.data.success !== 200) throw new Error('request')
 		// Renamed in place so the updater only ever sees a complete request
 		const renamed = await api.file.rename(request, `${STATE}/update-request`)
 		if (renamed.data.success !== 200) throw new Error('request')

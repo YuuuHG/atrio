@@ -61,19 +61,15 @@ extend('url', {
 })
 
 extend('yaml_port', {
+	// A port (1-65535) or a range of them, for example "8080" or "8000-8010", with an optional host IP
+	// in front ("192.168.1.10:8080")
 	validate: value => {
-		// match 1 to 3 digits, for example "192"
-		let num = "\\d{1,3}";
-
-		// match IP address, for example "
-		let ip = `(${num}\\.){3}${num}`;
-
-		// match 1 to 5 digits, may also contain a hyphen and another 1 to 5 digits, for example "80-8080"
-		let portRange = "\\d{1,5}(-\\d{1,5})?";
-
-		// match IP address and an optional port range, or just match port range
-		let regExp = new RegExp(`^(${ip}(:${portRange})?)|(^${portRange})$`);
-		return regExp.test(value)
+		const match = /^(?:(\d{1,3}(?:\.\d{1,3}){3}):)?(\d{1,5})(?:-(\d{1,5}))?$/.exec(String(value ?? '').trim())
+		if (!match) return false
+		const [, ip, from, to] = match
+		if (ip && ip.split('.').some(part => Number(part) > 255)) return false
+		const port = (p) => Number(p) >= 1 && Number(p) <= 65535
+		return port(from) && (to === undefined || (port(to) && Number(to) >= Number(from)))
 	},
 	message: 'Enter a port such as 8080, a range such as 8000-8010, or IP:port.',
 })

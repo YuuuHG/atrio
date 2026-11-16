@@ -92,7 +92,16 @@ export default {
             this.diffAndCombineData(initData, res.data.data)
           }
         }
-      })
+        else {
+          this.useDefaults(initData)
+        }
+      }).catch(() => this.useDefaults(initData))
+    },
+    // The saved layout could not be read: the default widgets for now, without saving over it
+    useDefaults(initData) {
+      this.widgetsSettings = initData
+      this.isLoading = false
+      this.handleResize()
     },
     // Atrio: keeps the saved order and the web page widgets; built-in widgets missing from the
     // saved list (new in this version) are added at the end, unknown ones are dropped

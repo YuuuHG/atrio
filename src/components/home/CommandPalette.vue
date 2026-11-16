@@ -5,6 +5,17 @@ import business_OpenThirdApp from '@/mixins/app/Business_OpenThirdApp'
 import business_ShowNewAppTag from '@/mixins/app/Business_ShowNewAppTag'
 import { ice_i18n } from '@/mixins/base/common-i18n'
 import events from '@/events/events'
+import { escapeHtml } from '@/plugins/appBackup'
+
+// The search engine's name for the hint; a saved address that is not a full URL must not break the list
+function hostOf(engine) {
+	try {
+		return new URL(engine).hostname.replace(/^www\./, '')
+	}
+	catch (e) {
+		return engine
+	}
+}
 
 export default {
 	name: 'CommandPalette',
@@ -70,7 +81,7 @@ export default {
 			return {
 				id: 'web-search',
 				label: this.$t('Search “{query}” on the web', { query }),
-				hint: new URL(engine).hostname.replace(/^www\./, ''),
+				hint: hostOf(engine),
 				icon: 'search-outline',
 				group: this.$t('Web'),
 				run: () => window.open(engine + encodeURIComponent(query), '_blank', 'noopener'),
@@ -138,12 +149,16 @@ export default {
 			this.$nextTick(() => restoreFocus(this.returnFocus))
 		},
 		onGlobalKey(event) {
+			// In a terminal or the text editor Ctrl+K is theirs (cut to the end of the line in a shell)
+			if (!this.open && event.target?.closest?.('.xterm, .cm-editor')) return
 			if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
 				event.preventDefault()
 				this.open ? this.close() : this.show()
 			}
 		},
 		onKey(event) {
+			// Not to a panel open under the palette, which listens on the window
+			if (event.key === 'Escape' || event.key === 'Tab') event.stopPropagation()
 			if (event.key === 'Escape') this.close()
 			else if (event.key === 'Tab') trapTab(event, event.currentTarget)
 			else if (event.key === 'ArrowDown') {
@@ -165,9 +180,9 @@ export default {
 		async restart(app, name) {
 			try {
 				await this.$openAPI.appManagement.compose.setComposeAppStatus(app.name, 'restart')
-				this.$buefy.toast.open({ message: `${name}: ${this.$t('restarted')}`, type: 'is-success' })
+				this.$buefy.toast.open({ message: `${escapeHtml(name)}: ${this.$t('restarted')}`, type: 'is-success' })
 			} catch (e) {
-				this.$buefy.toast.open({ message: `${name}: ${this.$t('restart failed')}`, type: 'is-danger' })
+				this.$buefy.toast.open({ message: `${escapeHtml(name)}: ${this.$t('restart failed')}`, type: 'is-danger' })
 			}
 		},
 	},

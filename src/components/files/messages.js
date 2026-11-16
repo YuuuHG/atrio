@@ -189,6 +189,7 @@ const en = {
   replaceAll: 'Replace all',
   closeSearch: 'Close search',
   downloadPreparing: 'Download starting…',
+  downloadComma: 'Folders with a comma in their name cannot be downloaded as a ZIP: rename them first',
 }
 
 const it = {
@@ -378,6 +379,7 @@ const it = {
   replaceAll: 'Sostituisci tutti',
   closeSearch: 'Chiudi ricerca',
   downloadPreparing: 'Download in avvio…',
+  downloadComma: 'Le cartelle con una virgola nel nome non si possono scaricare come ZIP: rinominale prima',
 }
 
 // vue-i18n 8 exposes mergeLocaleMessage on the instance, vue-i18n 9 on `global`.

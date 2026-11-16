@@ -94,8 +94,17 @@ export default {
 			})
 		},
 		checkUpdate() {
-
+			// CasaOS that does not come back on the new port within two minutes: say so instead of
+			// leaving the overlay up for good
+			const started = Date.now()
 			this.timer = setInterval(() => {
+				if (Date.now() - started > 120000) {
+					clearInterval(this.timer)
+					this.isLoading = false
+					this.errorType = 'is-danger'
+					this.errors = this.$t('CasaOS did not answer on port {port}. Open it by hand at that port, or reload this page.', { port: this.port })
+					return
+				}
 				const checkUrl = `${this.$protocol}//${this.$baseIp}:${this.port}`
 				this.$api.sys.checkUiPort(checkUrl + '/v1/gateway/port').then(res => {
 					if (res.data.success == 200) {

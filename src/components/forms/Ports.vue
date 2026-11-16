@@ -31,7 +31,9 @@
 							<!-- Only show title when the first item. -->
 							<b-field :label="index < 1 ? $t('Container') : ''" :message="errors[0] ? $t(errors[0]) : ''"
 								:type="{ 'is-danger': errors[0], 'is-success': valid }" expanded>
-								<b-input v-model.number="item.target" :placeholder="$t('Container')" expanded></b-input>
+								<!-- A number, or a range kept as text ("8000-8010") -->
+								<b-input :model-value="item.target" :placeholder="$t('Container')" expanded
+									@update:model-value="(value) => item.target = /^\d+$/.test(value) ? Number(value) : value"></b-input>
 							</b-field>
 						</validation-provider>
 
@@ -121,11 +123,10 @@ export default {
 			});
 		},
 		assignPortsItem(val, item) {
-			const reg = /((^(\d{1,3}\.){3}\d{1,3}):)?(\d{1,5}$)/;
-			const partList = val.match(reg);
-			console.log(partList?.[2], partList?.[4], val, "------")
-			item.host_ip = partList?.[2] || '';
-			item.published = partList?.[4] || val;
+			// "IP:port" or a port, either one a range ("8000-8010") too
+			const partList = String(val).trim().match(/^(?:((\d{1,3}\.){3}\d{1,3}):)?(\d{1,5}(?:-\d{1,5})?)$/);
+			item.host_ip = partList?.[1] || '';
+			item.published = partList?.[3] || val;
 		},
 
 		/*

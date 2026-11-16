@@ -203,7 +203,7 @@ import isEqual from 'lodash/isEqual'
 import { ice_i18n } from '@/mixins/base/common-i18n'
 import YAML from 'yamljs'
 import { findDowngrade } from '@/plugins/appVersions'
-import { loadDigestUpdates, loadHealth, loadIgnoredUpdates, updateApp } from '@/plugins/appBackup'
+import { escapeHtml, loadDigestUpdates, loadHealth, loadIgnoredUpdates, updateApp } from '@/plugins/appBackup'
 
 const SYNCTHING_STORE_ID = 74
 
@@ -473,7 +473,7 @@ export default {
 				this.loadUpdates()
 				if (kept.length) {
 					this.$buefy.toast.open({
-						message: this.$t('Not updated, the App Store only offers an older version: {names}', { names: kept.map(title).join(', ') }),
+						message: this.$t('Not updated, the App Store only offers an older version: {names}', { names: escapeHtml(kept.map(title).join(', ')) }),
 						type: 'is-warning',
 						duration: 10000,
 					})
@@ -495,7 +495,7 @@ export default {
 			if (failed.length) {
 				this.$buefy.toast.open({
 					message: this.$t('These apps did not accept the action: {names}', {
-						names: failed.map(name => this.appTitle(this.appList.find(item => item.name === name) || { name })).join(', '),
+						names: escapeHtml(failed.map(name => this.appTitle(this.appList.find(item => item.name === name) || { name })).join(', ')),
 					}),
 					type: 'is-danger',
 					duration: 8000,
@@ -865,10 +865,11 @@ export default {
 			showEl?.scrollIntoView({ behavior: 'smooth', block: 'end' })
 		},
 
+		// Text from the server and the apps' compose files: shown as text, never as HTML
 		messageBusToast (message, type) {
 			let duration = 5000
 			this.$buefy.toast.open({
-				message: message,
+				message: escapeHtml(message ?? ''),
 				duration,
 				type
 			})
@@ -908,10 +909,14 @@ export default {
 		},
 		'app:apply-changes-end' (res) {
 			this.endPull(res.Properties['app:name'])
-			let languages = JSON.parse(res.Properties['app:title'])
-			const title = ice_i18n(languages)
-			// toast info
-			this.messageBusToast(title + ' is OK', 'is-success')
+			let title = res.Properties['app:name']
+			try {
+				title = ice_i18n(JSON.parse(res.Properties['app:title'])) || title
+			}
+			catch (e) {
+				// The app's own name then
+			}
+			this.messageBusToast(this.$t('{title}: changes applied', { title }), 'is-success')
 
 			// business :: Tagging of new app / scrollIntoView
 			this.addIdToSessionStorage(res.Properties['app:name'])
@@ -933,7 +938,7 @@ export default {
 
 				this.$buefy.toast.open({
 					message: this.$t(`{name} has been updated to the latest version!`, {
-						name: data.Properties.name
+						name: escapeHtml(data.Properties.name)
 					}),
 					type: 'is-success'
 				})

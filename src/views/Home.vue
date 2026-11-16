@@ -109,6 +109,7 @@ export default {
     this.$EventBus.$on('casaUI:openStorageManager', this.showStorageManagerPanelModal)
   },
   beforeUnmount() {
+    clearTimeout(this.hardwareRetry)
     clearInterval(this.clockTimer)
     this.$EventBus.$off('atrio:apps-summary', this.setAppsSummary)
     window.removeEventListener('resize', this.onResize)
@@ -219,11 +220,17 @@ export default {
      */
 
     getHardwareInfo() {
+      // The widgets wait for it: a failed answer is asked again, or they would never show
       this.$api.sys.getUtilization().then((res) => {
         if (res.data.success === 200) {
           this.hardwareInfoLoading = false
           this.$store.commit('SET_HARDWARE_INFO', res.data.data)
         }
+        else {
+          this.hardwareRetry = setTimeout(this.getHardwareInfo, 5000)
+        }
+      }).catch(() => {
+        this.hardwareRetry = setTimeout(this.getHardwareInfo, 5000)
       })
     },
 
