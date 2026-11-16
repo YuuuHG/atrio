@@ -2,6 +2,15 @@
 
 What changes in each Atrio release. The section for a version is also the text of its GitHub release.
 
+## 0.1.23 — unreleased
+
+**Changed**
+
+- **The history charts are thin strips now**, one per measure (processor, memory, received, sent, processor and
+  hottest disk temperature) on one time axis, in place of four separate charts. Moving the mouse, or the arrow keys,
+  moves one line across all of them and shows every value at that moment, so what happened together is easy to
+  see; the peak is on the right. The disks' temperatures use the same strips, one per disk.
+
 ## 0.1.22 — 2026-11-16
 
 **Fixed**

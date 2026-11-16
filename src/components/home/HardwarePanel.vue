@@ -6,14 +6,12 @@ import { restoreFocus, trapTab } from '@/plugins/focusTrap'
 import { renderSize } from '@/mixins/file_utils'
 import { ice_i18n } from '@/mixins/base/common-i18n'
 import { diskId, loadAppUsage, loadDiskTemps, loadHistory } from '@/plugins/history'
-import HistoryChart from '@/components/home/HistoryChart.vue'
+import HistoryStrips from '@/components/home/HistoryStrips.vue'
 import { startDiskTest } from '@/plugins/appBackup'
 
 const POLL_MS = 3000
-// Two series: validated for colour blindness on the panel's dark surface (dataviz validator)
-const COLORS = ['#0aa5c4', '#8b5cf6']
-// Up to four disks, validated the same way; more disks share the last, muted colour
-const DISK_COLORS = ['#0aa5c4', '#8b5cf6', '#d97706', '#db2777']
+// The history's one hue, checked for contrast on the panel's dark surface (dataviz validator)
+const COLORS = ['#0aa5c4']
 // SMART data of the disks, read every hour by atrio-alerts on the server
 const DISKS = '/var/lib/casaos/atrio/disks.json'
 // SELFTEST=0 there turns the scheduled self-tests off
@@ -55,7 +53,7 @@ function storedUnit() {
 export default {
 	name: 'HardwarePanel',
 	compatConfig: { MODE: 3 },
-	components: { HistoryChart },
+	components: { HistoryStrips },
 	data() {
 		return {
 			open: false,
@@ -172,15 +170,30 @@ export default {
 			this.range = hours
 			this.loadHistory()
 		},
+		// The strips of the history, in the order of the panel above them
+		historyRows() {
+			// One hue: each strip is a single measure, named on its left
+			const [cpu] = this.colors
+			return [
+				{ label: this.$t('Processor'), values: this.column('cpu'), format: this.percent, color: cpu, max: 100 },
+				{ label: this.$t('Memory'), values: this.column('memory'), format: this.percent, color: cpu, max: 100 },
+				{ label: this.$t('Received'), values: this.column('down'), format: this.rate, color: cpu, min: 1024 },
+				{ label: this.$t('Sent'), values: this.column('up'), format: this.rate, color: cpu, min: 1024 },
+				{ label: this.$t('Processor °C'), values: this.column('cpuTemp'), format: this.degrees, color: cpu, fit: true },
+				{ label: this.$t('Hottest disk °C'), values: this.column('diskTemp'), format: this.degrees, color: cpu, fit: true },
+			].filter((row) => row.values.some((value) => value !== null))
+		},
 		// One line per disk that has points, named by its model (and device when two share it)
 		diskTempSeries() {
 			if (!this.diskTemps || this.diskTemps.times.length < 2 || !this.disks) return []
 			const models = this.disks.map((disk) => disk.model)
 			return this.disks.filter((disk) => this.diskTemps.disks[diskId(disk)]?.some((value) => value !== null))
-				.map((disk, index) => ({
+				.map((disk) => ({
 					label: models.filter((model) => model === disk.model).length > 1 ? `${disk.model} (${disk.device})` : disk.model || disk.device,
-					color: DISK_COLORS[index] || '#475569',
+					color: this.colors[0],
 					values: this.diskTemps.disks[diskId(disk)],
+					format: this.degrees,
+					fit: true,
 				}))
 		},
 		column(key) {
@@ -461,10 +474,7 @@ export default {
 							</div>
 							<p v-if="history === null" class="atrio-hardware-muted">{{ $t('Loading…') }}</p>
 							<template v-else>
-								<HistoryChart :format="percent" :max="100" :series="[{ label: 'CPU', color: colors[0], values: column('cpu') }]" :times="column('time')" :title="$t('Processor')" />
-								<HistoryChart :format="percent" :max="100" :series="[{ label: $t('Memory'), color: colors[0], values: column('memory') }]" :times="column('time')" :title="$t('Memory')" />
-								<HistoryChart :format="rate" :min="1024" :series="[{ label: $t('Received'), color: colors[0], values: column('down') }, { label: $t('Sent'), color: colors[1], values: column('up') }]" :times="column('time')" :title="$t('Network')" />
-								<HistoryChart :format="degrees" :min="50" :series="[{ label: $t('Processor'), color: colors[0], values: column('cpuTemp') }, { label: $t('Disks'), color: colors[1], values: column('diskTemp') }]" :times="column('time')" :title="$t('Temperatures')" />
+								<HistoryStrips :rows="historyRows()" :times="column('time')" />
 							</template>
 							<template v-if="appUsage.length">
 								<h4 class="atrio-hardware-apps-title">{{ $t('Apps now') }}</h4>
@@ -524,7 +534,8 @@ export default {
 								</div>
 							</div>
 							<div v-if="diskTempSeries().length" class="atrio-hardware-disk-chart">
-								<HistoryChart :format="degrees" :min="50" :series="diskTempSeries()" :times="diskTemps.times" :title="range > 24 ? $t('Disk temperatures, last 7 days') : $t('Disk temperatures, last 24 hours')" />
+								<h4 class="atrio-hardware-apps-title">{{ range > 24 ? $t('Disk temperatures, last 7 days') : $t('Disk temperatures, last 24 hours') }}</h4>
+								<HistoryStrips :rows="diskTempSeries()" :times="diskTemps.times" />
 							</div>
 							<p class="atrio-hardware-muted">{{ $t('Read from SMART every hour, without waking disks that sleep. A disk that gets worse sends a push alert.') }}</p>
 							<label v-if="disks.some(canTest)" class="atrio-hardware-autotest">

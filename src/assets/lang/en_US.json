@@ -1020,5 +1020,9 @@
   "{kind} self-test of {device} stopped before the end": "{kind} self-test of {device} stopped before the end",
   "Test running": "Test running",
   "Disk temperatures, last 24 hours": "Disk temperatures, last 24 hours",
-  "Disk temperatures, last 7 days": "Disk temperatures, last 7 days"
+  "Disk temperatures, last 7 days": "Disk temperatures, last 7 days",
+  "peak": "peak",
+  "Processor °C": "Processor °C",
+  "Hottest disk °C": "Hottest disk °C",
+  "History charts: use the left and right arrows to move through time": "History charts: use the left and right arrows to move through time"
 }
