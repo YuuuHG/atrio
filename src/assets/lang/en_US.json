@@ -1049,5 +1049,15 @@
   "Restarting now": "Restarting now",
   "Please wait for about 90 seconds.": "Please wait for about 90 seconds.",
   "Now shutting down": "Now shutting down",
-  "Please wait for about 30 seconds before cutting off the power.": "Please wait for about 30 seconds before cutting off the power."
+  "Please wait for about 30 seconds before cutting off the power.": "Please wait for about 30 seconds before cutting off the power.",
+  "The server stops": "The server stops",
+  "It starts again": "It starts again",
+  "Atrio comes back": "Atrio comes back",
+  "Apps and services stop": "Apps and services stop",
+  "The server is off": "The server is off",
+  "The server is off. You can cut the power now.": "The server is off. You can cut the power now.",
+  "This takes longer than usual. Once the server is on again, reload this page.": "This takes longer than usual. Once the server is on again, reload this page.",
+  "The server still answers. Wait a little longer before cutting the power.": "The server still answers. Wait a little longer before cutting the power.",
+  "It usually takes a minute or two. The page reloads by itself when the server is back.": "It usually takes a minute or two. The page reloads by itself when the server is back.",
+  "Wait until this screen says the server is off before cutting the power.": "Wait until this screen says the server is off before cutting the power."
 }

@@ -12,6 +12,7 @@ import { consolePrefs, setConsoleView } from '@/plugins/consoleView'
 import AccountPanel from './account/AccountPanel.vue'
 import ConsolePanel from './logsAndTerminal/ConsolePanel.vue'
 import PortPanel from './settings/PortPanel.vue'
+import PowerScreen from './settings/PowerScreen.vue'
 import UpdateModal from './settings/UpdateModal.vue'
 import { mixin } from '@/mixins/mixin'
 import messages from '@/assets/lang'
@@ -28,6 +29,7 @@ export default {
     SettingsBackup,
     UnusedImages,
     AccountPanel,
+    PowerScreen,
   },
   mixins: [mixin],
   props: {
@@ -87,8 +89,7 @@ export default {
       restart: 'Restart',
       shutdown: 'Shutdown',
       showPower: false,
-      showPowerTitle: '',
-      showPowerMessage: '',
+      powerKind: 'restart',
     }
   },
   computed: {
@@ -496,38 +497,14 @@ export default {
         return
       }
       this.closeSettings(false)
+      this[key.toLowerCase()] = key
+      // The screen watches the server go down and come back, and reloads the page after a restart
+      this.powerKind = key === 'Shutdown' ? 'shutdown' : 'restart'
       this.showPower = true
-      switch (key) {
-        case 'Restart':
-          this.$messageBus('dashboardsetting_reboot')
-          this[key.toLowerCase()] = key
-          this.showPowerTitle = 'Restarting now'
-          this.showPowerMessage = 'Please wait for about 90 seconds.'
-          break
-        case 'Shutdown':
-          this.$messageBus('dashboardsetting_shutdown')
-          this[key.toLowerCase()] = key
-          this.showPowerTitle = 'Now shutting down'
-          this.showPowerMessage = 'Please wait for about 30 seconds before cutting off the power.'
-          break
-      }
-      const path = key === 'Shutdown' ? 'off' : 'restart'
-      this.$api.sys.power(path).then((res) => {
-        // After a shutdown there is nothing to wait for
-        if (res.data.success === 200 && key !== 'Shutdown') {
-          this.showPowerMessage = res.data.data
-          clearInterval(this.powerTimer)
-          this.powerTimer = setInterval(() => {
-            this.$api.users.getUserStatus().then((res) => {
-              if (res.data.data.initialized) {
-                clearInterval(this.powerTimer)
-                location.reload()
-              }
-            }).catch(() => {
-              // Still restarting
-            })
-          }, 30000)
-        }
+      this.$messageBus(key === 'Shutdown' ? 'dashboardsetting_shutdown' : 'dashboardsetting_reboot')
+      this.$api.sys.power(key === 'Shutdown' ? 'off' : 'restart').then((res) => {
+        if (res.data.success !== 200)
+          throw new Error('power')
       }).catch(() => {
         this.resetPower()
         this.$buefy.toast.open({ message: this.$t('the action failed'), type: 'is-danger' })
@@ -831,36 +808,7 @@ export default {
     </div>
 
 
-    <b-modal v-model="showPower" :can-cancel="false" class="_modal" scroll="clip" width="20rem">
-      <b-message @close="resetPower">
-        <template #header>
-          {{ $t(showPowerTitle) }}
-          <img
-            v-if="showPowerTitle === 'Now shutting down'"
-            :src="$asset('@/assets/img/loading/waiting.svg')"
-            alt="pending"
-            class="ml-1 is-24x24"
-          >
-        </template>
-        <div
-          :class="showPowerTitle === 'Now shutting down' ? 'mb-4' : ''"
-          class="is-flex is-align-items-center is-justify-content-start _is-normal"
-        >
-          {{ $t(showPowerMessage) }}
-        </div>
-      </b-message>
-      <footer
-        v-if="showPowerTitle !== 'Now shutting down'"
-        class="has-background-white is-flex is-flex-direction-row-reverse"
-      >
-        <button
-          class="ml-2 mr-5 mt-3 mb-3 pr-4 pl-4 _is-normal _has-background-blue is-flex is-align-items-center is-justify-content-center"
-        >
-          {{ $t("Connecting") }}
-          <img :src="$asset('@/assets/img/power/waiting-white.svg')" alt="loading" class="ml-1">
-        </button>
-      </footer>
-    </b-modal>
+    <PowerScreen v-if="showPower" :kind="powerKind" @close="resetPower" />
   </div>
   </div>
 </template>

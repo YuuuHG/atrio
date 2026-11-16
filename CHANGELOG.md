@@ -4,6 +4,13 @@ What changes in each Atrio release. The section for a version is also the text o
 
 ## 0.1.24 — unreleased
 
+**Changed**
+
+- **Restart and shut down** show a full-page screen in the style of the Atrio update, in place of CasaOS's small
+  white box with its message cut off: the steps (the server stops, starts again, Atrio comes back), the time
+  passed, and a page that reloads by itself as soon as the server answers again, instead of checking every 30
+  seconds. After a shutdown it says when the power can be cut, once the server no longer answers.
+
 **Fixed**
 
 - **App settings and install:** a port range like 8000-8010 was cut to its last port, or to its first in the

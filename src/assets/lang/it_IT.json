@@ -1049,5 +1049,15 @@
   "Restarting now": "Riavvio in corso",
   "Please wait for about 90 seconds.": "Attendi circa 90 secondi.",
   "Now shutting down": "Spegnimento in corso",
-  "Please wait for about 30 seconds before cutting off the power.": "Attendi circa 30 secondi prima di togliere la corrente."
+  "Please wait for about 30 seconds before cutting off the power.": "Attendi circa 30 secondi prima di togliere la corrente.",
+  "The server stops": "Il server si ferma",
+  "It starts again": "Si riavvia",
+  "Atrio comes back": "Atrio torna disponibile",
+  "Apps and services stop": "App e servizi si fermano",
+  "The server is off": "Il server è spento",
+  "The server is off. You can cut the power now.": "Il server è spento. Ora puoi togliere la corrente.",
+  "This takes longer than usual. Once the server is on again, reload this page.": "Ci sta mettendo più del solito. Quando il server è di nuovo acceso, ricarica questa pagina.",
+  "The server still answers. Wait a little longer before cutting the power.": "Il server risponde ancora. Aspetta ancora un po' prima di togliere la corrente.",
+  "It usually takes a minute or two. The page reloads by itself when the server is back.": "Di solito ci vogliono uno o due minuti. La pagina si ricarica da sola quando il server è tornato.",
+  "Wait until this screen says the server is off before cutting the power.": "Aspetta che questa schermata dica che il server è spento prima di togliere la corrente."
 }
