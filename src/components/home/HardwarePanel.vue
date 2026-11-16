@@ -262,7 +262,8 @@ export default {
 					this.$buefy.toast.open({ message: this.$t('Test started: the result shows here when it ends.'), type: 'is-success' })
 				}
 				catch (e) {
-					this.$buefy.toast.open({ message: this.$t(e.message || 'The disk did not start the test'), type: 'is-danger' })
+					const running = e.message === 'A test is already running on this disk'
+					this.$buefy.toast.open({ message: this.$t(e.message || 'The disk did not start the test'), type: running ? 'is-info' : 'is-danger' })
 				}
 				this.testing = ''
 				this.loadDisks()

@@ -2,6 +2,15 @@
 
 What changes in each Atrio release. The section for a version is also the text of its GitHub release.
 
+## 0.1.22 — unreleased
+
+**Fixed**
+
+- **A disk self-test that was running did not show in the hardware panel**, so "Short test" answered that a test
+  was already running with nothing on screen to say so (the first scheduled test starts right after the update).
+  While a test runs the disks are now read every 5 minutes instead of every hour, so the panel shows it and its
+  result soon after it ends, and a refused test shows the one that is running.
+
 ## 0.1.21 — 2026-11-16
 
 **New**

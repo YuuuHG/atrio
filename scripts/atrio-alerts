@@ -381,14 +381,24 @@ check_disk_health() {
 	local now last device type
 	now=$(date +%s)
 	last=$(memory_get disks_checked)
-	[ -n "$last" ] && [ $((now - last)) -lt 3600 ] && [ -f "$DISKS_JSON" ] && return 0
-	memory_set disks_checked "$now"
+	# Once an hour; every 5 minutes while a self-test runs, so the panel follows it and shows the result
+	DISKS_TIME=""
+	if [ -n "$last" ] && [ $((now - last)) -lt 3600 ] && [ -f "$DISKS_JSON" ]; then
+		[ "$(memory_get disks_testing)" = 1 ] || return 0
+	else
+		memory_set disks_checked "$now"
+		# The temperature history keeps the hourly points only
+		DISKS_TIME=$now
+	fi
 	touch "$DISKS_TSV"
-	DISKS_TIME=$now
+	TESTING=0
 	while read -r device _ type _; do
 		[[ "$device" =~ ^/dev/[A-Za-z0-9/_-]+$ ]] && [[ "$type" =~ ^[A-Za-z0-9,_+-]+$ ]] || continue
-		read_disk "$device" "$type" && [ "$SELFTEST" = 1 ] && schedule_selftest "$device" "$type"
+		read_disk "$device" "$type" || continue
+		[ -n "$(smart_get "$DISK_VALUES" RUNNING)" ] && TESTING=1
+		[ "$SELFTEST" = 1 ] && schedule_selftest "$device" "$type"
 	done < <(LC_ALL=C timeout 60 smartctl --scan-open 2>/dev/null | grep -v '^#')
+	memory_set disks_testing "$TESTING"
 	if [ -f "$DISKS_HISTORY" ]; then
 		keep_since "$DISKS_HISTORY" $((now - 7 * 86400))
 		chmod 644 "$DISKS_HISTORY"
@@ -489,6 +499,8 @@ start_selftest() {
 	# A long test reads everything a short one does
 	[ "$kind" = long ] && memory_set "test_short_$DISK_ID" "$now"
 	if LC_ALL=C timeout 60 smartctl -t "$kind" -d "$type" "$device" >/dev/null 2>&1; then
+		TESTING=1
+		memory_set disks_testing 1
 		log_activity disk-test ok "" "$kind started $device"
 		return 0
 	fi
@@ -1034,7 +1046,8 @@ if [ "$MODE" = "--disk-test" ]; then
 		[ "$device" = "$2" ] && [[ "$type" =~ ^[A-Za-z0-9,_+-]+$ ]] || continue
 		touch "$DISKS_TSV"
 		WAKE=1 read_disk "$device" "$type" || exit 1
-		[ -n "$(smart_get "$DISK_VALUES" RUNNING)" ] && exit 2
+		# The panel then shows the test that is running
+		[ -n "$(smart_get "$DISK_VALUES" RUNNING)" ] && { memory_set disks_testing 1; write_disks; exit 2; }
 		start_selftest "$device" "$type" "$3" || exit 1
 		# Read again so the panel shows it running
 		sleep "${ATRIO_TEST_WAIT:-2}"

@@ -59,6 +59,18 @@ sed 's/^Self-test execution status: .*/Self-test execution status:      ( 249)	S
 alerts 3
 check "an ATA disk's running test too" is "$(disk /dev/sda running)" 30
 
+# While a test runs the disks are read every 5 minutes, not hourly, and the history keeps hourly points
+points=$(wc -l < "$ATRIO_STATE/history-disks.tsv")
+reads=$(grep -c 'smartctl -n standby' "$FAKE_DOCKER/calls.log")
+ATRIO_HOUR=3 bash "$SCRIPTS/atrio-alerts" >/dev/null 2>&1
+check "a running test is read again 5 minutes later" is "$(grep -c 'smartctl -n standby' "$FAKE_DOCKER/calls.log")" $((reads + 3))
+check "without an extra point in the temperature history" is "$(wc -l < "$ATRIO_STATE/history-disks.tsv")" "$points"
+rm -f "$FAKE_DOCKER/smart-sda" "$FAKE_DOCKER/smart-nvme0"
+ATRIO_HOUR=14 bash "$SCRIPTS/atrio-alerts" >/dev/null 2>&1
+check "the end of the test is seen" is "$(disk /dev/sda running)" ""
+ATRIO_HOUR=14 bash "$SCRIPTS/atrio-alerts" >/dev/null 2>&1
+check "then back to once an hour" is "$(grep -c 'smartctl -n standby' "$FAKE_DOCKER/calls.log")" $((reads + 6))
+
 # Results: a new one is logged, a failed one makes the disk one to replace and sends the alert
 nvme_log ' 0   Short             Completed without error                4300            -     -   -   -    -'
 alerts 14
@@ -110,6 +122,7 @@ sed -i 's/^Self-test execution status: .*/Self-test execution status:      ( 249
 sed -i 's/^					without error or no self-test has ever $/					90% of test remaining./' "$FAKE_DOCKER/smart-sda"
 ATRIO_TEST_WAIT=0 request ACTION=disk-test APP=atrio DEVICE=/dev/sda KIND=short
 check "not over a running test" is "$STATE_ $MESSAGE" "error A test is already running on this disk"
+check "and the panel then shows it running" is "$(disk /dev/sda running)" 10
 ATRIO_TEST_WAIT=0 request ACTION=disk-test APP=atrio DEVICE=/dev/sdc KIND=short
 check "only a disk smartctl lists" is "$STATE_ $MESSAGE" "error The disk did not start the test"
 ATRIO_TEST_WAIT=0 request ACTION=disk-test APP=atrio DEVICE='/dev/sda;reboot' KIND=short
