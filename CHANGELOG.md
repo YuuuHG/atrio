@@ -2,7 +2,7 @@
 
 What changes in each Atrio release. The section for a version is also the text of its GitHub release.
 
-## 0.1.21 — unreleased
+## 0.1.21 — 2026-11-16
 
 **New**
 
@@ -24,6 +24,15 @@ What changes in each Atrio release. The section for a version is also the text o
   turns the disk to Replace soon and sends the alert. They can be turned off below the disks.
 - **Each disk's temperature over time**, in the hardware panel below the disks: one line per disk for the last 24
   hours or 7 days, from the hourly SMART reading, with gaps while a disk sleeps.
+
+**Updating**
+
+From 0.1.17 or later, Update in the settings brings the new services on the server too. From an older version, run
+the install command once more; Atrio shows a notice with it when its services are out of date:
+
+```
+curl -fsSL https://raw.githubusercontent.com/peppeaiello/atrio/main/scripts/install.sh | sudo bash
+```
 
 ## 0.1.20 — 2026-11-15
 
