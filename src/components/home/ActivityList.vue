@@ -96,11 +96,12 @@ export default {
 			switch (event.action) {
 				case 'backup': return event.result === 'ok' ? this.$t(REASONS[words[0]] || 'by hand') : this.$t(event.detail)
 				case 'schedule':
+					if (event.result === 'error') return this.$t(event.detail)
 					if (words[0] === 'off') return this.$t('turned off')
 					return words[0] === 'weekly'
 						? this.$t('every {day} at {time}', { day: new Date(2024, 0, Number(words[2]) || 1).toLocaleDateString(this.$i18n.locale?.replace('_', '-'), { weekday: 'long' }), time: words[1] })
 						: this.$t('every day at {time}', { time: words[1] })
-				case 'ignore-updates': return words[0] === '1'
+				case 'ignore-updates': return event.result === 'error' ? this.$t(event.detail) : words[0] === '1'
 					? this.$t('Updates of {app} are no longer shown', { app: this.title(event) })
 					: this.$t('Updates of {app} are shown again', { app: this.title(event) })
 				case 'remove-images': {

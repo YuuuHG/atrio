@@ -85,6 +85,20 @@ wait "$pid"
 check "an update whose terminal hangs up still finishes" is "$(status)" "Atrio 9.9.9 installed"
 check "and installs the new web UI" has "$ATRIO_WWW/atrio-version.json" 9.9.9
 
+# Never back to an older release
+echo '{"version":"10.0.0"}' > "$ATRIO_WWW/atrio-version.json"
+update
+check "an older release on GitHub is refused" is "$(status)" "The release on GitHub (9.9.9) is older than the installed one (10.0.0): nothing was changed"
+check "and the web UI is left as it is" has "$ATRIO_WWW/atrio-version.json" 10.0.0
+
+# Another update running: this one waits, and when it gives up leaves no request for the path unit
+echo token > "$ATRIO_STATE/update-request"
+( flock 9; sleep 4 ) 9>"$ATRIO_STATE/lock" &
+sleep 0.5
+ATRIO_LOCK_WAIT=1 bash "$SCRIPTS/atrio-update" >/dev/null 2>&1
+wait
+check "a request that could not run is not left behind" test ! -e "$ATRIO_STATE/update-request"
+
 # atrio-setup alone: every service and unit, from a folder with the release's scripts
 ATRIO_ROOT="$SB/root2" bash -c 'mkdir -p "$ATRIO_ROOT/etc/systemd/system" "$ATRIO_ROOT/usr/local/bin"; bash "$1" "$2"' _ "$SCRIPTS/atrio-setup" "$SB/server" >/dev/null 2>&1
 units=$(ls "$SB/root2/etc/systemd/system" | wc -l)

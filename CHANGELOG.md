@@ -28,6 +28,21 @@ What changes in each Atrio release. The section for a version is also the text o
   Storage widget, and on a phone the disk details wrap instead of being cut. The strips follow a finger too.
 - Turning the self-tests off in the hardware panel was undone by saving the push alert settings when those were
   already open.
+- **Safe updates:** an app on the same tag (like `latest`) whose new image did not start went back to its backup
+  but kept running the new image; it gets its old image back now. Two quick clicks on Update no longer start two
+  updates, and other actions on an app no longer show "Backing up" on its tile.
+- **Atrio updates** never go back to an older release, even a signed one; an update asked while another was running
+  could leave the update button dead until a restart.
+- **Backups:** automatic backups loaded with the settings on a new machine were dropped before the apps were
+  restored, and now wait a week for them; the backup an app was just put back to is never pruned; uninstalling
+  Atrio keeps the backup key, without which its backups cannot be read.
+- **Unused images:** "Remove all" removes the images on the list, not others that became unused since; a request
+  naming no valid image removed every unused one.
+- A request the backup service did not pick up no longer runs later, after the page said it failed, and one that
+  stopped halfway no longer leaves the page waiting forever. Copying the install command or the backup key says when
+  the browser could not copy (plain HTTP). App names are shown as text in every message. Activity shows failed
+  schedule changes correctly, the alert limits take whole numbers only, and the outdated-services notice no longer
+  shows when the server only failed to answer.
 
 ## 0.1.22 — 2026-11-16
 

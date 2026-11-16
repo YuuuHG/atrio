@@ -1028,5 +1028,7 @@
   "No app used the network in the last 24 hours.": "Nessuna app ha usato la rete nelle ultime 24 ore.",
   "No service of the server used the network in the last 24 hours.": "Nessun servizio del server ha usato la rete nelle ultime 24 ore.",
   "Hottest disk": "Disco più caldo",
-  "The server is busy, try again in a minute": "Il server è occupato, riprova tra un minuto"
+  "The server is busy, try again in a minute": "Il server è occupato, riprova tra un minuto",
+  "Could not copy: select the text and copy it by hand": "Copia non riuscita: seleziona il testo e copialo a mano",
+  "The backup service stopped answering. Check Activity to see what was done.": "Il servizio dei backup ha smesso di rispondere. Guarda in Attività cosa è stato fatto."
 }

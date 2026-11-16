@@ -177,8 +177,10 @@ export async function checkServices() {
 		services.checked = true
 	}
 	catch (e) {
-		// The server answered: no such file. Without an answer, asked again on the next page load
-		if (e.response) {
+		// The server answered: no such file. Without an answer, logged out (401) or a server error,
+		// asked again on the next page load
+		const status = e.response?.status
+		if (status && status !== 401 && status < 500) {
 			services.outdated = true
 			services.checked = true
 		}

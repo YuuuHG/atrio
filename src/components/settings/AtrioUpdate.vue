@@ -2,6 +2,7 @@
 // Atrio's own version and updates, in the settings menu next to the CasaOS update.
 // The check and the update live in plugins/atrioRelease, shared with the settings icon dot and
 // the full-page progress screen.
+import { copyText } from '@/plugins/copyText'
 import { CURRENT, INSTALL_COMMAND, checkLatest, checkServices, release, services, startUpdate, updateAvailable } from '@/plugins/atrioRelease'
 
 export default {
@@ -33,8 +34,7 @@ export default {
 			startUpdate()
 		},
 		copyInstall() {
-			navigator.clipboard?.writeText(this.install)
-			this.$buefy.toast.open({ message: this.$t('Copied'), type: 'is-success' })
+			copyText(this, this.install)
 		},
 	},
 }

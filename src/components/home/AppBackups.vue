@@ -1,6 +1,7 @@
 <script>
 // The Backup tab of the app panel: choose what to save, make a backup, go back to one.
 // The work runs on the server, see plugins/appBackup.js.
+import { copyText } from '@/plugins/copyText'
 import { renderSize } from '@/mixins/file_utils'
 import FilesIcon from '@/components/files/FilesIcon.vue'
 import { errorMessage, listFolder, listLocations, parentPath } from '@/components/files/files.js'
@@ -147,7 +148,7 @@ export default {
 		},
 		async create() {
 			if (await this.act(() => backupApp(this.app, this.selected))) {
-				this.$buefy.toast.open({ message: this.$t('Backup of {title} saved', { title: this.title }), type: 'is-success' })
+				this.$buefy.toast.open({ message: this.$t('Backup of {title} saved', { title: escapeHtml(this.title) }), type: 'is-success' })
 			}
 		},
 		restore(backup) {
@@ -159,7 +160,7 @@ export default {
 				type: 'is-danger',
 				onConfirm: async () => {
 					if (await this.act(() => restoreApp(this.app, backup.id, backup.dest))) {
-						this.$buefy.toast.open({ message: this.$t('{title} is back to the backup of {time}', { title: this.title, time: this.when(backup.time) }), type: 'is-success', duration: 6000 })
+						this.$buefy.toast.open({ message: this.$t('{title} is back to the backup of {time}', { title: escapeHtml(this.title), time: escapeHtml(this.when(backup.time)) }), type: 'is-success', duration: 6000 })
 					}
 				},
 			})
@@ -244,11 +245,10 @@ export default {
 			if (!this.key) this.error = this.$t('The backup key could not be read')
 		},
 		copyKey() {
-			navigator.clipboard?.writeText(this.key)
-			this.$buefy.toast.open({ message: this.$t('Key copied'), type: 'is-success' })
+			copyText(this, this.key, 'Key copied')
 		},
 		copyInstall() {
-			navigator.clipboard?.writeText(this.install)
+			copyText(this, this.install)
 		},
 	},
 }

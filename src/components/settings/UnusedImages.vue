@@ -70,7 +70,8 @@ export default {
 				confirmText: this.$t('Remove'),
 				cancelText: this.$t('Cancel'),
 				type: 'is-danger',
-				onConfirm: () => this.remove(all ? [] : [image.id]),
+				// The images on the list, never others that became unused since it was read
+				onConfirm: () => this.remove(all ? this.images.map((item) => item.id) : [image.id]),
 			})
 		},
 		async remove(ids) {

@@ -42,8 +42,11 @@ fi
 
 # One run at a time (the path unit and a manual run could overlap)
 exec 9>"$STATE/lock"
-if ! flock -n 9; then
+# Waits for the other run (a restore after a CasaOS update takes a minute); giving up leaves no
+# request behind, or the path unit would start this again at once until systemd stops it
+if ! flock -w "${ATRIO_LOCK_WAIT:-900}" 9; then
 	echo "Another Atrio update is running" >&2
+	rm -f "$REQUEST"
 	exit 0
 fi
 
@@ -187,6 +190,14 @@ if [ "$latest" = "$(installed_version "$WWW")" ] && [ -z "$MODE" ]; then
 	fi
 	write_status done "Atrio $latest is already installed"
 	exit 0
+fi
+
+# Never back to an older release: one signed by us but older, put back as the latest on GitHub,
+# would bring back what a newer one fixed
+installed=$(installed_version "$WWW")
+if [ -z "$MODE" ] && [ -n "$installed" ] && [ -n "$latest" ] &&
+	[ "$(printf '%s\n%s\n' "$latest" "$installed" | sort -V | tail -n 1)" = "$installed" ]; then
+	fail "The release on GitHub ($latest) is older than the installed one ($installed): nothing was changed"
 fi
 
 write_status running "Installing Atrio $latest"

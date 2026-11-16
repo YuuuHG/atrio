@@ -55,6 +55,9 @@ check "the tab sees no schedule" has "$ATRIO_STATE/backups/web.json" '"schedule"
 # An app that is uninstalled loses its schedule, and its list once it has no backups
 rm -rf "$ATRIO_APPS/other"
 bash "$SCRIPTS/atrio-backup" --scheduled >/dev/null 2>&1
-check "the schedule of an uninstalled app goes away" test ! -e "$ATRIO_STATE/schedules/other"
+check "the schedule of an app not installed waits (loaded with the settings on a new machine)" test -e "$ATRIO_STATE/schedules/other"
+touch -d '8 days ago' "$ATRIO_STATE/schedules/other"
+bash "$SCRIPTS/atrio-backup" --scheduled >/dev/null 2>&1
+check "the schedule of an uninstalled app goes away after a week" test ! -e "$ATRIO_STATE/schedules/other"
 check "and its list too, as it has no backups" test ! -e "$ATRIO_STATE/backups/other.json"
 finish

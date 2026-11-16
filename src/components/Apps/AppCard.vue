@@ -9,7 +9,7 @@ import business_OpenThirdApp from '@/mixins/app/Business_OpenThirdApp'
 import business_LinkApp from '@/mixins/app/Business_LinkApp'
 import tipEditorModal from '@/components/Apps/TipEditorModal.vue'
 import commonI18n, { ice_i18n } from '@/mixins/base/common-i18n'
-import { backupRun, setIgnoreUpdates, updateApp } from '@/plugins/appBackup'
+import { backupRun, escapeHtml, setIgnoreUpdates, updateApp } from '@/plugins/appBackup'
 
 // The update ring, the same size as the install one
 const PULL_RADIUS = 30
@@ -133,7 +133,7 @@ export default {
       return Boolean(UNWELL[this.health])
     },
     backingUp() {
-      return backupRun.app === this.item.name && backupRun.action !== 'scan' && backupRun.action !== 'check-updates'
+      return backupRun.app === this.item.name && (backupRun.action === 'backup' || backupRun.action === 'restore')
     },
     statusPill() {
       if (this.serverUpdate) return this.$t(SERVER_UPDATE_STEPS[backupRun.step]?.[1] || 'Updating')
@@ -672,8 +672,8 @@ export default {
         await setIgnoreUpdates(this.item.name, !this.updatesIgnored)
         this.$buefy.toast.open({
           message: this.updatesIgnored
-            ? this.$t('Updates of {title} are shown again', { title: this.title })
-            : this.$t('Updates of {title} are no longer shown. You can still update it from this menu.', { title: this.title }),
+            ? this.$t('Updates of {title} are shown again', { title: escapeHtml(this.title) })
+            : this.$t('Updates of {title} are no longer shown. You can still update it from this menu.', { title: escapeHtml(this.title) }),
           type: 'is-success',
           duration: 6000,
         })
@@ -683,12 +683,14 @@ export default {
         this.$buefy.toast.open({
           message: e.message === 'Unknown request'
             ? this.$t('This needs the latest version of the service on the server. Run the install command once more.')
-            : this.$t(e.message),
+            : escapeHtml(this.$t(e.message)),
           type: 'is-danger',
         })
       }
     },
     async checkAppVersion(name) {
+      // A second click while the first update runs
+      if (this.isCheckThenUpdate || this.serverUpdate) return
       this.isCheckThenUpdate = true
       // Atrio: the tile shows the progress, the menu does not stay open over it
       this.$refs.dro.isActive = false

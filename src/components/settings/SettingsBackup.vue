@@ -1,6 +1,7 @@
 <script>
 // Settings file, in the settings panel: everything needed to set Atrio up again on a new machine,
 // in one file encrypted with a password. The work runs on the server, see plugins/appBackup.js.
+import { copyText } from '@/plugins/copyText'
 import { backupRun, backupsInstalled, escapeHtml, exportSettings, importSettings } from '@/plugins/appBackup'
 
 const INSTALL = 'curl -fsSL https://raw.githubusercontent.com/peppeaiello/atrio/main/scripts/install.sh | sudo bash'
@@ -116,8 +117,7 @@ export default {
 			}
 		},
 		copyInstall() {
-			navigator.clipboard?.writeText(this.install)
-			this.$buefy.toast.open({ message: this.$t('Copied'), type: 'is-success' })
+			copyText(this, this.install)
 		},
 	},
 }

@@ -97,6 +97,8 @@ def inspect_container(c, fmt, state):
         return f"{c['service']}={c['image']}\n"
     if 'com.docker.compose.service' in fmt:
         return f"{c['service']}\t{c['ref']}\t{c['image']}\n"
+    if fmt == '{{.Config.Image}} {{.Image}}':
+        return f"{c['ref']} {c['image']}\n"
     if '.Config.Image' in fmt:
         return c['ref'] + '\n'
     if fmt == '{{.Image}}':
@@ -144,7 +146,7 @@ def compose(args, state):
             for c in mine:
                 if c['service'] == service:
                     c['ref'], c['image'] = ref, image['id']
-                    c['state'] = ('restarting' if crashes(ref) else 'running') if start else 'exited'
+                    c['state'] = ('restarting' if crashes(ref) or crashes(image['id']) else 'running') if start else 'exited'
         return 0
     if command[:1] == ['start']:
         for c in mine:
@@ -193,6 +195,16 @@ def main(args):
         return 0
     if args[:1] == ['images']:
         out.write(''.join(i['id'] + '\n' for i in state['images']))
+        return 0
+    if args[:1] == ['tag']:
+        image = image_by_ref(state, args[1])
+        if image is None:
+            return 1
+        for other in state['images']:
+            if args[2] in other['tags']:
+                other['tags'].remove(args[2])
+        image['tags'].append(args[2])
+        save(state)
         return 0
     if args[:2] == ['image', 'rm']:
         image = image_by_ref(state, args[-1])

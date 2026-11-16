@@ -11,6 +11,8 @@ const STATUS = `${STATE}/backup-status.json`
 const POLL_MS = 1500
 // The service has to pick up a request by then; once running, a large app can take hours
 const PICKUP_MS = 30 * 1000
+// A running operation that has not moved for this long: the service stopped (killed, server restarted)
+const STALL_MS = 6 * 60 * 60 * 1000
 // How long the app is watched after an update starts, and how long it must stay up to count as fine
 const WATCH_MS = 10 * 60 * 1000
 const WATCH_POLL_MS = 5000
@@ -64,6 +66,8 @@ async function run(fields) {
 		if (!renamed || renamed.data.success !== 200) throw new Error('Could not reach the backup service on the server')
 
 		let started = Date.now()
+		let seen = ''
+		let moved = Date.now()
 		for (;;) {
 			await new Promise((resolve) => setTimeout(resolve, POLL_MS))
 			const status = await readJson(STATUS)
@@ -71,6 +75,13 @@ async function run(fields) {
 				backupRun.step = status.step
 				if (status.state === 'done') return status
 				if (status.state === 'error') throw Object.assign(new Error(status.message), { status })
+				if (`${status.step} ${status.time}` !== seen) {
+					seen = `${status.step} ${status.time}`
+					moved = Date.now()
+				}
+				else if (Date.now() - moved > STALL_MS) {
+					throw new Error('The backup service stopped answering. Check Activity to see what was done.')
+				}
 			}
 			else if (status?.state === 'running') {
 				// An automatic backup is running: the service takes this request once it is done
@@ -78,6 +89,8 @@ async function run(fields) {
 				started = Date.now()
 			}
 			else if (Date.now() - started > PICKUP_MS) {
+				// Not taken: removed, so it does not run later, after the page said it failed
+				await api.batch.delete(JSON.stringify([REQUEST])).catch(() => {})
 				throw new Error('Could not reach the backup service on the server')
 			}
 		}
@@ -200,19 +213,19 @@ export function escapeHtml(text) {
 
 function askToGoBack(vm, name, title, id) {
 	vm.$buefy.dialog.confirm({
-		title: vm.$t('{title} did not start after the update', { title: escapeHtml(title) }),
+		title: vm.$t('{title} did not start after the update', { title }),
 		message: vm.$t('A backup from just before the update is ready. Go back to it? The app returns to the version and the data it had then.'),
 		confirmText: vm.$t('Go back'),
 		cancelText: vm.$t('Leave it'),
 		type: 'is-danger',
 		onConfirm: async () => {
-			vm.$buefy.toast.open({ message: vm.$t('Restoring {title}…', { title }), type: 'is-info' })
+			vm.$buefy.toast.open({ message: vm.$t('Restoring {title}…', { title: escapeHtml(title) }), type: 'is-info' })
 			try {
 				await restoreApp(name, id)
-				vm.$buefy.toast.open({ message: vm.$t('{title} is back as it was before the update', { title }), type: 'is-success', duration: 6000 })
+				vm.$buefy.toast.open({ message: vm.$t('{title} is back as it was before the update', { title: escapeHtml(title) }), type: 'is-success', duration: 6000 })
 			}
 			catch (e) {
-				vm.$buefy.toast.open({ message: vm.$t(e.message), type: 'is-danger', duration: 10000 })
+				vm.$buefy.toast.open({ message: escapeHtml(vm.$t(e.message)), type: 'is-danger', duration: 10000 })
 			}
 		},
 	})
@@ -297,10 +310,10 @@ const ROLLED_BACK = 'The new version did not start, so the app went back to how 
 // them, recreates the app and checks it; if it does not come up, it goes back to the backup on its own.
 // Rejects with 'Unknown request' when the service on the server is older than this.
 async function updateOnServer(vm, name, title, quiet, images = []) {
-	if (!quiet) vm.$buefy.toast.open({ message: vm.$t('Saving a backup of {title}, then updating it…', { title }), type: 'is-info', duration: 5000 })
+	if (!quiet) vm.$buefy.toast.open({ message: vm.$t('Saving a backup of {title}, then updating it…', { title: escapeHtml(title) }), type: 'is-info', duration: 5000 })
 	try {
 		await run({ ACTION: 'update-app', APP: name, SET_IMAGE: images })
-		if (!quiet) vm.$buefy.toast.open({ message: vm.$t('{title} is updated', { title }), type: 'is-success' })
+		if (!quiet) vm.$buefy.toast.open({ message: vm.$t('{title} is updated', { title: escapeHtml(title) }), type: 'is-success' })
 		return 'updated'
 	}
 	catch (e) {
@@ -308,8 +321,8 @@ async function updateOnServer(vm, name, title, quiet, images = []) {
 		if (!quiet) {
 			vm.$buefy.toast.open({
 				message: e.message === ROLLED_BACK
-					? vm.$t('{title} did not start with the new version, so Atrio put it back as it was before the update.', { title })
-					: vm.$t('{title} was not updated: {reason}', { title, reason: vm.$t(e.message) }),
+					? vm.$t('{title} did not start with the new version, so Atrio put it back as it was before the update.', { title: escapeHtml(title) })
+					: vm.$t('{title} was not updated: {reason}', { title: escapeHtml(title), reason: escapeHtml(vm.$t(e.message)) }),
 				type: e.message === ROLLED_BACK ? 'is-warning' : 'is-danger',
 				duration: 12000,
 			})
@@ -360,7 +373,7 @@ export async function updateApp(vm, name, title, { quiet = false } = {}) {
 		}
 		if (!quiet) {
 			vm.$buefy.toast.open({
-				message: vm.$t('{title} stays on {installed}: the App Store only offers {store}, which could stop it from working. To change version, edit the tag in its settings.', { title, ...older }),
+				message: vm.$t('{title} stays on {installed}: the App Store only offers {store}, which could stop it from working. To change version, edit the tag in its settings.', { title: escapeHtml(title), installed: escapeHtml(older.installed), store: escapeHtml(older.store) }),
 				type: 'is-warning',
 				duration: 10000,
 			})
@@ -388,7 +401,7 @@ export async function updateApp(vm, name, title, { quiet = false } = {}) {
 			}
 		}
 		if (state === 'current') {
-			if (!quiet) vm.$buefy.toast.open({ message: vm.$t('{title} is up to date', { title }), type: 'is-info' })
+			if (!quiet) vm.$buefy.toast.open({ message: vm.$t('{title} is up to date', { title: escapeHtml(title) }), type: 'is-info' })
 			return 'current'
 		}
 	}
@@ -407,14 +420,14 @@ export async function updateApp(vm, name, title, { quiet = false } = {}) {
 	}
 
 	if (hasUpdate && await backupsInstalled()) {
-		if (!quiet) vm.$buefy.toast.open({ message: vm.$t('Saving a backup of {title} before updating…', { title }), type: 'is-info', duration: 5000 })
+		if (!quiet) vm.$buefy.toast.open({ message: vm.$t('Saving a backup of {title} before updating…', { title: escapeHtml(title) }), type: 'is-info', duration: 5000 })
 		try {
 			backupId = (await backupApp(name, null, 'before-update')).id
 		}
 		catch (e) {
 			if (!quiet) {
 				vm.$buefy.toast.open({
-					message: vm.$t('{title} was not updated, because the backup failed: {reason}', { title, reason: vm.$t(e.message) }),
+					message: vm.$t('{title} was not updated, because the backup failed: {reason}', { title: escapeHtml(title), reason: escapeHtml(vm.$t(e.message)) }),
 					type: 'is-danger',
 					duration: 10000,
 				})
@@ -427,10 +440,10 @@ export async function updateApp(vm, name, title, { quiet = false } = {}) {
 		const res = await compose.updateComposeApp(name)
 		if (/up to date/i.test(res.data.message || '')) {
 			// CasaOS does nothing here: the App Store has no newer version yet, even if the app itself announces one
-			if (!quiet) vm.$buefy.toast.open({ message: vm.$t('{title} is already on the version the App Store offers. The app may announce a newer one before the App Store has it.', { title }), type: 'is-info', duration: 8000 })
+			if (!quiet) vm.$buefy.toast.open({ message: vm.$t('{title} is already on the version the App Store offers. The app may announce a newer one before the App Store has it.', { title: escapeHtml(title) }), type: 'is-info', duration: 8000 })
 			return 'current'
 		}
-		if (!quiet) vm.$buefy.toast.open({ message: res.data.message || vm.$t('No updates are currently available for the application.'), type: 'is-success' })
+		if (!quiet) vm.$buefy.toast.open({ message: res.data.message ? escapeHtml(res.data.message) : vm.$t('No updates are currently available for the application.'), type: 'is-success' })
 	}
 	catch (e) {
 		if (!quiet) vm.$buefy.toast.open({ message: vm.$t('Unable to update at the moment!'), type: 'is-danger' })

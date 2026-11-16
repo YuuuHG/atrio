@@ -57,6 +57,16 @@ request ACTION=update-app APP=web
 check "a stopped app is updated" is "$STATE_" done
 check "and stays stopped" is "$(docker_query "state['containers'][0]['state']")" exited
 
+# Same tag, new image that does not start: going back runs the old image again, not the new one
+docker_state "state['containers'][0]['state'] = 'running'"
+docker_state "state['registry']['nginx:1.1'] = {'id': 'sha256:9999', 'digest': 'sha256:' + '4' * 64}"
+echo sha256:9999 > "$FAKE_DOCKER/crash"
+request ACTION=update-app APP=web
+check "a new image of the same tag that does not start goes back" is "$MESSAGE" "The new version did not start, so the app went back to how it was before the update"
+check "to the old image" is "$(docker_query "state['containers'][0]['image']")" sha256:ffff
+check "which runs again" is "$(docker_query "state['containers'][0]['state']")" running
+rm "$FAKE_DOCKER/crash"
+
 request ACTION=ignore-updates APP=web IGNORE=1
 check "an app's updates can be ignored" has "$ATRIO_STATE/updates.json" '"ignored":["web"]'
 request ACTION=ignore-updates APP=web IGNORE=0

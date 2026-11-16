@@ -51,7 +51,14 @@ main() {
 		/etc/systemd/system/atrio-backup-schedule.service /etc/systemd/system/atrio-backup-schedule.timer \
 		/etc/systemd/system/atrio-check-updates.service /etc/systemd/system/atrio-check-updates.timer
 	systemctl daemon-reload
-	rm -rf "$STATE" /usr/local/share/atrio
+	# The backups stay where they are, and only this key can read them: it stays too
+	if [ -f "$STATE/backup.key" ]; then
+		find "$STATE" -mindepth 1 ! -name backup.key -exec rm -rf {} + 2>/dev/null
+		echo "The backup key stays in $STATE/backup.key: Atrio's backups cannot be restored without it."
+	else
+		rm -rf "$STATE"
+	fi
+	rm -rf /usr/local/share/atrio
 	echo "CasaOS UI restored. Reload the page in your browser (Ctrl+F5)."
 }
 

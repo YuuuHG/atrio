@@ -40,6 +40,8 @@ HEALTH_STEADY="${ATRIO_HEALTH_STEADY:-20}"
 ACTION="" APP="" ID="" REASON="manual" TOKEN="" DEST="$DEFAULT_DEST" DEST_MOUNT="" NEW_DEST="" FROM=""
 EVERY="" AT="" DAY="" KEEP="" PASSWORD="" REPLACE_KEY=0
 IMAGES_CHOSEN=()
+# Set when the request named images: none valid then is an error, never "every unused image"
+IMAGE_ASKED=0
 IGNORE=""
 DEVICE="" KIND=""
 # "service=image" for an update to the App Store's version, and set while going back after one
@@ -167,7 +169,7 @@ read_request() {
 			KEEP) KEEP="$value" ;;
 			PASSWORD) PASSWORD="$value" ;;
 			REPLACE_KEY) [ "$value" = 1 ] && REPLACE_KEY=1 ;;
-			IMAGE) [[ "$value" =~ ^sha256:[0-9a-f]{64}$ ]] && IMAGES_CHOSEN+=("$value") ;;
+			IMAGE) IMAGE_ASKED=1; [[ "$value" =~ ^sha256:[0-9a-f]{64}$ ]] && IMAGES_CHOSEN+=("$value") ;;
 			IGNORE) [[ "$value" =~ ^[01]$ ]] && IGNORE="$value" ;;
 			DEVICE) [[ "$value" =~ ^/dev/[A-Za-z0-9/_-]+$ ]] && DEVICE="$value" ;;
 			KIND) [[ "$value" =~ ^(short|long)$ ]] && KIND="$value" ;;
@@ -578,6 +580,8 @@ prune_auto() {
 	keep=$(schedule_value "$APP" KEEP)
 	while IFS= read -r info; do
 		[ -n "$info" ] || continue
+		# The backup an app was just put back to stays, even if it is the oldest
+		[ "$ACTION" = restore ] && [ "$(basename "$info" .info)" = "$ID" ] && continue
 		case "$(info_value "$info" REASON)" in
 			manual) ;;
 			scheduled)
@@ -1039,9 +1043,10 @@ run_schedules() {
 		[ -f "$file" ] || continue
 		app=$(basename "$file")
 		[[ "$app" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]] && [[ "$app" != *.tmp ]] || continue
-		# An app that was uninstalled has no more backups planned
+		# An app that was uninstalled has no more backups planned; one loaded with the settings on a
+		# new machine waits a week for its app to be installed or restored
 		if ! [ -f "$APPS/$app/docker-compose.yml" ]; then
-			rm -f "$file"
+			[ -n "$(find "$file" -mtime +7 2>/dev/null)" ] && rm -f "$file"
 			continue
 		fi
 		every=$(schedule_value "$app" EVERY)
@@ -1278,6 +1283,7 @@ docker_free() {
 do_remove_images() {
 	local before after unused id removed=0 failed=0
 	unused=$(unused_images | cut -f1)
+	[ "$IMAGE_ASKED" = 1 ] && [ "${#IMAGES_CHOSEN[@]}" -eq 0 ] && fail "Unknown image"
 	[ "${#IMAGES_CHOSEN[@]}" -gt 0 ] || mapfile -t IMAGES_CHOSEN <<< "$unused"
 	before=$(docker_free)
 	for id in ${IMAGES_CHOSEN[@]+"${IMAGES_CHOSEN[@]}"}; do
@@ -1499,6 +1505,14 @@ do_update_app() {
 	local before="$compose_file.atrio-before-update"
 	cp -p "$compose_file" "$before" || fail "The new version could not be downloaded, the app was not changed"
 	[ -f "$next" ] && mv "$next" "$compose_file"
+	# The images the app runs now, by id: a pull of the same tag (latest) moves the tag to the new
+	# image, and going back must put it on the old one again
+	OLD_IMAGES=()
+	local cid image_ref image_id
+	while read -r cid; do
+		read -r image_ref image_id < <(docker inspect -f '{{.Config.Image}} {{.Image}}' "$cid" 2>/dev/null)
+		[ -n "$image_ref" ] && [[ "$image_id" =~ ^sha256:[0-9a-f]+$ ]] && OLD_IMAGES+=("$image_ref=$image_id")
+	done < <(docker ps -aq --filter "label=com.docker.compose.project=$APP" 2>/dev/null)
 	write_status running pulling
 	if ! compose pull >/dev/null 2>&1; then
 		mv "$before" "$compose_file"
@@ -1524,6 +1538,10 @@ roll_back() {
 	FROM=""
 	DEST="$CONF_DEST"
 	DEST_MOUNT="$CONF_MOUNT"
+	local item
+	for item in ${OLD_IMAGES[@]+"${OLD_IMAGES[@]}"}; do
+		docker tag "${item#*=}" "${item%%=*}" >/dev/null 2>&1
+	done
 	do_restore
 	check_updates "$APP" >/dev/null
 	fail "The new version did not start, so the app went back to how it was before the update"

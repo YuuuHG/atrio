@@ -2,6 +2,7 @@
 // Push alerts settings, in the settings panel. Atrio writes alerts.conf through the CasaOS file
 // API; atrio-alerts (installed by scripts/install.sh) reads it every 5 minutes and sends the
 // warnings to ntfy, Gotify or Apprise. "Send a test" goes through the server, like the real alerts.
+import { copyText } from '@/plugins/copyText'
 import { ice_i18n } from '@/mixins/base/common-i18n'
 
 const STATE = '/var/lib/casaos/atrio'
@@ -90,6 +91,8 @@ export default {
 			return /^[A-Za-z0-9._-]{0,128}$/.test(this.conf.TOKEN) && (!this.isGotify || this.conf.TOKEN !== '')
 		},
 		limitsValid() {
+			// Whole numbers only: the service ignores anything else and keeps its default
+			if (!/^\d+$/.test(String(this.conf.DISK_LIMIT)) || !/^\d+$/.test(String(this.conf.TEMP_LIMIT))) return false
 			const disk = Number(this.conf.DISK_LIMIT)
 			const temp = Number(this.conf.TEMP_LIMIT)
 			const time = /^([01][0-9]|2[0-3]):[0-5][0-9]$/
@@ -253,8 +256,7 @@ export default {
 			this.pollTimer = setTimeout(poll, 1500)
 		},
 		copyInstall() {
-			navigator.clipboard?.writeText(this.install)
-			this.$buefy.toast.open({ message: this.$t('Copied'), type: 'is-success' })
+			copyText(this, this.install)
 		},
 	},
 }

@@ -1028,5 +1028,7 @@
   "No app used the network in the last 24 hours.": "No app used the network in the last 24 hours.",
   "No service of the server used the network in the last 24 hours.": "No service of the server used the network in the last 24 hours.",
   "Hottest disk": "Hottest disk",
-  "The server is busy, try again in a minute": "The server is busy, try again in a minute"
+  "The server is busy, try again in a minute": "The server is busy, try again in a minute",
+  "Could not copy: select the text and copy it by hand": "Could not copy: select the text and copy it by hand",
+  "The backup service stopped answering. Check Activity to see what was done.": "The backup service stopped answering. Check Activity to see what was done."
 }
