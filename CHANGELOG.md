@@ -2,7 +2,7 @@
 
 What changes in each Atrio release. The section for a version is also the text of its GitHub release.
 
-## 0.1.23 — unreleased
+## 0.1.23 — 2026-11-16
 
 **Changed**
 
@@ -43,6 +43,15 @@ What changes in each Atrio release. The section for a version is also the text o
   the browser could not copy (plain HTTP). App names are shown as text in every message. Activity shows failed
   schedule changes correctly, the alert limits take whole numbers only, and the outdated-services notice no longer
   shows when the server only failed to answer.
+
+**Updating**
+
+From 0.1.17 or later, Update in the settings brings the new services on the server too. From an older version, run
+the install command once more; Atrio shows a notice with it when its services are out of date:
+
+```
+curl -fsSL https://raw.githubusercontent.com/peppeaiello/atrio/main/scripts/install.sh | sudo bash
+```
 
 ## 0.1.22 — 2026-11-16
 
