@@ -58,13 +58,13 @@ docker_state "state['containers'][2]['id'] = 'hhhhhhhh'"
 # Docker itself and one inside the server, as ss -tinpH prints them
 sockets() {
 	cat > "$FAKE_DOCKER/sockets" <<SS
-ESTAB 0 0 192.168.1.88:8123 192.168.1.7:51000 users:(("python3",pid=201,fd=30))
+ESTAB 0 0 192.168.1.10:8123 192.168.1.20:51000 users:(("python3",pid=201,fd=30))
 	 cubic bytes_sent:500 bytes_acked:$3 bytes_received:$1 segs_out:3
-ESTAB 0 0 192.168.1.88:445 192.168.1.7:51001 users:(("smbd",pid=202,fd=33))
+ESTAB 0 0 192.168.1.10:445 192.168.1.20:51001 users:(("smbd",pid=202,fd=33))
 	 cubic bytes_acked:100 bytes_received:$2 segs_out:3
-ESTAB 0 0 192.168.1.88:80 192.168.1.7:51002 users:(("casaos-gateway",pid=203,fd=9))
+ESTAB 0 0 192.168.1.10:80 192.168.1.20:51002 users:(("casaos-gateway",pid=203,fd=9))
 	 cubic bytes_acked:7000 bytes_received:3000
-ESTAB 0 0 192.168.1.88:2375 192.168.1.7:51003 users:(("dockerd",pid=204,fd=9))
+ESTAB 0 0 192.168.1.10:2375 192.168.1.20:51003 users:(("dockerd",pid=204,fd=9))
 	 cubic bytes_acked:9999999 bytes_received:9999999
 ESTAB 0 0 127.0.0.1:5000 127.0.0.1:51004 users:(("smbd",pid=202,fd=34))
 	 cubic bytes_acked:9999999 bytes_received:9999999
