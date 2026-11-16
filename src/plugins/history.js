@@ -113,17 +113,19 @@ export async function loadAppUsage() {
 	if (!text) return []
 	const rows = text.split('\n').filter(Boolean).map((line) => line.split('\t'))
 	const last = Math.max(...rows.map((row) => Number(row[0]) || 0))
-	return rows.filter((row) => Number(row[0]) === last && !row[1].startsWith('svc:'))
+	return rows.filter((row) => Number(row[0]) === last && row[1] && !row[1].startsWith('svc:'))
 		.map(([, app, cpu, memory]) => ({ app, cpu: Number(cpu) || 0, memory: Number(memory) || 0 }))
 		.sort((a, b) => b.memory - a.memory)
 }
 
 /**
  * Bytes received and sent over the last 24 hours, from the 5-minute samples: the apps, the server's
- * services (svc:<unit>) and the whole server. { apps: [{ app, down, up }], services: [{ name, down, up }], server: { down, up } }
+ * services (svc:<unit>) and the whole server, or null with an older service. { apps: [{ app, down, up }], services: [{ name, down, up }], server: { down, up } }
  */
 export async function loadDayTraffic() {
 	const [apps, history] = await Promise.all([read(`${STATE}/history-apps.tsv`), read(`${STATE}/history.tsv`)])
+	// An older service keeps neither
+	if (apps === null && history === null) return null
 	const totals = new Map()
 	const last = new Map()
 	for (const line of (apps || '').split('\n').filter(Boolean)) {
@@ -161,7 +163,7 @@ export async function loadBusiestApp() {
 	if (!text) return null
 	const rows = text.split('\n').filter(Boolean).map((line) => line.split('\t'))
 	const last = Math.max(...rows.map((row) => Number(row[0]) || 0))
-	const apps = rows.filter((row) => Number(row[0]) === last && !row[1].startsWith('svc:'))
+	const apps = rows.filter((row) => Number(row[0]) === last && row[1] && !row[1].startsWith('svc:'))
 		.map(([, app, , , down, up]) => ({ app, down: Number(down) || 0, up: Number(up) || 0 }))
 		.sort((a, b) => b.down + b.up - (a.down + a.up))
 	// Below 1 KB/s nothing worth naming is going on

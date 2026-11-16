@@ -1023,6 +1023,10 @@
   "Disk temperatures, last 7 days": "Disk temperatures, last 7 days",
   "peak": "peak",
   "Processor °C": "Processor °C",
-  "Hottest disk °C": "Hottest disk °C",
-  "History charts: use the left and right arrows to move through time": "History charts: use the left and right arrows to move through time"
+  "History charts: use the left and right arrows to move through time": "History charts: use the left and right arrows to move through time",
+  "The last 24 hours need the latest version of the service on the server. Run the install command once more.": "The last 24 hours need the latest version of the service on the server. Run the install command once more.",
+  "No app used the network in the last 24 hours.": "No app used the network in the last 24 hours.",
+  "No service of the server used the network in the last 24 hours.": "No service of the server used the network in the last 24 hours.",
+  "Hottest disk": "Hottest disk",
+  "The server is busy, try again in a minute": "The server is busy, try again in a minute"
 }

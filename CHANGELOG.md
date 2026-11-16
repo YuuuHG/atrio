@@ -11,6 +11,24 @@ What changes in each Atrio release. The section for a version is also the text o
   moves one line across all of them and shows every value at that moment, so what happened together is easy to
   see; the peak is on the right. The disks' temperatures use the same strips, one per disk.
 
+**Fixed**
+
+- **Network detail:** closing and opening it again quickly could start two measures at once, or end in a false
+  "another backup is in progress"; a measure while the server was busy showed the previous one as new, and now says
+  the server is busy. With an older service the last 24 hours say they need the latest one, instead of showing
+  zeros. On a phone the received and sent columns no longer run into each other, and the share bar shows.
+- **Network counts:** an app whose containers share one network (`network_mode: service:...`, like a VPN
+  container) was counted twice; a failed read of the connections no longer makes the next one count all their
+  bytes again.
+- **Disk self-tests:** a disk seen for the first time gets its first short test the next night instead of right
+  after the update; a test asked from the panel while the server was busy looked started but was not; a test
+  asked from the panel no longer sends a push alert with alerts turned off.
+- **Hardware panel:** a disk alone between gaps shows on its strip, quick switches between 24 hours and 7 days
+  no longer show the wrong range, the panel no longer scrolls to the disks by itself after one was opened from the
+  Storage widget, and on a phone the disk details wrap instead of being cut. The strips follow a finger too.
+- Turning the self-tests off in the hardware panel was undone by saving the push alert settings when those were
+  already open.
+
 ## 0.1.22 — 2026-11-16
 
 **Fixed**

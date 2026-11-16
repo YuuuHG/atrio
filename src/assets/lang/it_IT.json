@@ -1023,6 +1023,10 @@
   "Disk temperatures, last 7 days": "Temperature dei dischi, ultimi 7 giorni",
   "peak": "picco",
   "Processor °C": "Processore °C",
-  "Hottest disk °C": "Disco più caldo °C",
-  "History charts: use the left and right arrows to move through time": "Grafici della cronologia: usa le frecce sinistra e destra per muoverti nel tempo"
+  "History charts: use the left and right arrows to move through time": "Grafici della cronologia: usa le frecce sinistra e destra per muoverti nel tempo",
+  "The last 24 hours need the latest version of the service on the server. Run the install command once more.": "Le ultime 24 ore richiedono la versione più recente del servizio sul server. Esegui di nuovo il comando di installazione.",
+  "No app used the network in the last 24 hours.": "Nessuna app ha usato la rete nelle ultime 24 ore.",
+  "No service of the server used the network in the last 24 hours.": "Nessun servizio del server ha usato la rete nelle ultime 24 ore.",
+  "Hottest disk": "Disco più caldo",
+  "The server is busy, try again in a minute": "Il server è occupato, riprova tra un minuto"
 }

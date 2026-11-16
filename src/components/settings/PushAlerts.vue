@@ -190,7 +190,11 @@ export default {
 			this.saving = true
 			this.saved = false
 			try {
-				if ((await this.read(CONF)) === null) await this.$api.file.create(CONF)
+				const current = await this.read(CONF)
+				if (current === null) await this.$api.file.create(CONF)
+				// Changed from the hardware panel since these settings were loaded: keep that choice
+				const selftest = /^SELFTEST=([01])$/m.exec(current || '')
+				if (selftest) this.conf.SELFTEST = selftest[1]
 				const res = await this.$api.file.update(CONF, this.text())
 				if (res.data.success !== 200) throw new Error('save')
 				this.saved = true

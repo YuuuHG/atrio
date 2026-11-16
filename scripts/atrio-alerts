@@ -23,7 +23,12 @@ mkdir -p "$STATE"
 
 # One run at a time: the timer and a test could overlap
 exec 9>"$STATE/alerts.lock"
-flock -w 30 9 || exit 0
+# A run on the timer can take a while (disks waking up, docker stats): what the web UI asks for waits
+# longer for it, and says so when it could not run (75), instead of looking done
+case "$MODE" in
+	--network | --disk-test) flock -w "${ATRIO_LOCK_WAIT:-90}" 9 || exit 75 ;;
+	*) flock -w 30 9 || exit 0 ;;
+esac
 
 # --- Settings ---------------------------------------------------------------------------------
 
@@ -472,6 +477,11 @@ schedule_selftest() {
 	hour=${ATRIO_HOUR:-$(date +%-H)}
 	short=$(memory_get "test_short_$DISK_ID")
 	long=$(memory_get "test_long_$DISK_ID")
+	# A disk seen for the first time gets its first short test the next night, not right away
+	if [ -z "$short" ]; then
+		short=$((now - SHORT_EVERY))
+		memory_set "test_short_$DISK_ID" "$short"
+	fi
 	if [ -z "$long" ]; then
 		long=$((now - LONG_EVERY + 7 * 86400))
 		memory_set "test_long_$DISK_ID" "$long"
@@ -479,13 +489,12 @@ schedule_selftest() {
 	if [ $((now - long)) -ge "$LONG_EVERY" ]; then
 		kind=long every=$LONG_EVERY last=$long
 	elif [ -z "$short" ] || [ $((now - short)) -ge "$SHORT_EVERY" ]; then
-		kind=short every=$SHORT_EVERY last=${short:-0}
+		kind=short every=$SHORT_EVERY last=$short
 	fi
 	[ -n "$kind" ] || return 0
 	# From 1 to 6 in the morning, or at any hour once two days late (a server off at night)
 	late=0
 	[ "$last" -gt 0 ] && [ $((now - last)) -ge $((every + 2 * 86400)) ] && late=1
-	[ "$last" = 0 ] && late=1
 	[ "$hour" -ge 1 ] && [ "$hour" -le 6 ] || [ "$late" = 1 ] || return 0
 	start_selftest "$device" "$type" "$kind"
 }
@@ -695,6 +704,9 @@ app_net_counters() {
 			[ -n "$app" ] && [[ "$pid" =~ ^[0-9]+$ ]] || continue
 			if [ "$mode" = host ]; then
 				echo "$app host"
+			elif [[ "$mode" == container:* ]]; then
+				# It shares another container's network (network_mode: service:...): counted there
+				continue
 			else
 				awk -v app="$app" 'NR > 2 { sub(/^ */, ""); split($0, f, /[: ]+/); if (f[1] != "lo") { rx += f[2]; tx += f[10] } } END { printf "%s %.0f %.0f\n", app, rx, tx }' "$PROC/$pid/net/dev" 2>/dev/null
 			fi
@@ -778,10 +790,16 @@ record_apps() {
 	sockets=$(host_sockets)
 	before_sockets=$(cat "$STATE/net-sockets" 2>/dev/null)
 	then=$(memory_get sockets_time)
-	printf '%s\n' "$sockets" > "$STATE/net-sockets"
-	chmod 600 "$STATE/net-sockets"
-	memory_set sockets_time "$now"
 	delta=""
+	# None read (ss failed, or no connection at all): the last snapshot stays, so the next run counts
+	# from it instead of taking every byte of the connections as new
+	if [ -n "$sockets" ]; then
+		printf '%s\n' "$sockets" > "$STATE/net-sockets"
+		chmod 600 "$STATE/net-sockets"
+		memory_set sockets_time "$now"
+	else
+		then=""
+	fi
 	[ -n "$then" ] && [ "$now" -gt "$then" ] && delta=$(socket_delta "$before_sockets" "$sockets" | awk -v s=$((now - then)) '{ printf "%s %.0f %.0f\n", $1, $2 / s, $3 / s }')
 	memory_set apps_net "$now $(printf '%s' "$counters" | grep -v ' host$' | tr ' \n' ': ')"
 	# In C: in other languages awk reads 12.5 as 12 and writes 12,5
@@ -1042,6 +1060,8 @@ trim_activity
 if [ "$MODE" = "--disk-test" ]; then
 	command -v smartctl >/dev/null || exit 1
 	[[ "$3" =~ ^(short|long)$ ]] || exit 1
+	# Alerts go out from the timer's runs, which know whether they are on and set up
+	SEND_HEALTH=0
 	while read -r device _ type _; do
 		[ "$device" = "$2" ] && [[ "$type" =~ ^[A-Za-z0-9,_+-]+$ ]] || continue
 		touch "$DISKS_TSV"

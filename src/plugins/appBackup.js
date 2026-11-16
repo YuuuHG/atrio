@@ -176,10 +176,10 @@ export async function removeImages(ids = []) {
 	return { removed: removed || 0, freed: freed || 0 }
 }
 
-/** The network now, measured on the server over a few seconds: { time, server: { down, up }, apps: [{ app, down, up } | { app, host }] } */
 /** A SMART self-test now, short or long, on a disk smartctl lists; the disk runs it on its own. */
 export const startDiskTest = (device, kind) => run({ ACTION: 'disk-test', APP: 'atrio', DEVICE: device, KIND: kind })
 
+/** The network now, measured on the server over a few seconds: { time, server: { down, up }, apps: [{ app, down, up } | { app, host }] } */
 export async function measureNetwork() {
 	await run({ ACTION: 'network', APP: 'atrio' })
 	return readJson(`${STATE}/network.json`)

@@ -22,7 +22,9 @@ check "the self-tests a disk can run are read" is "$(disk /dev/nvme0 selftest) $
 check "with the latest result" is "$(disk /dev/nvme0 test) $(disk /dev/nvme0 testkind) $(disk /dev/nvme0 testhours)" "passed short 4210"
 check "an ATA disk's latest result" is "$(disk /dev/sda test) $(disk /dev/sda testkind) $(disk /dev/sda testhours)" "passed long 21000"
 check "the log rows are not read as SMART attributes" is "$(disk /dev/nvme0 hours) $(disk /dev/nvme0 realloc)" "4215 "
-check "a disk never tested by Atrio gets a short test, at any hour" is "$(started short nvme /dev/nvme0) $(started short sat /dev/sda)" "1 1"
+check "a disk seen for the first time is not tested right away" is "$(grep -c 'smartctl -t' "$FAKE_DOCKER/calls.log")" 0
+alerts 3
+check "but the next night, with a short test" is "$(started short nvme /dev/nvme0) $(started short sat /dev/sda)" "1 1"
 check "a disk that cannot run tests gets none" is "$(grep -c "smartctl -t .* /dev/sdb" "$FAKE_DOCKER/calls.log")" 0
 check "no long test on the first day" is "$(grep -c 'smartctl -t long' "$FAKE_DOCKER/calls.log")" 0
 check "the start is logged" has "$ATRIO_STATE/activity.log" "disk-test	ok		short started /dev/nvme0"
@@ -123,6 +125,12 @@ sed -i 's/^					without error or no self-test has ever $/					90% of test remain
 ATRIO_TEST_WAIT=0 request ACTION=disk-test APP=atrio DEVICE=/dev/sda KIND=short
 check "not over a running test" is "$STATE_ $MESSAGE" "error A test is already running on this disk"
 check "and the panel then shows it running" is "$(disk /dev/sda running)" 10
+# Busy: the timer's run holds the lock longer than the request waits
+( flock 9; sleep 4 ) 9>"$ATRIO_STATE/alerts.lock" &
+sleep 0.5
+ATRIO_LOCK_WAIT=1 ATRIO_TEST_WAIT=0 request ACTION=disk-test APP=atrio DEVICE=/dev/sda KIND=long
+wait
+check "a busy server says so instead of looking done" is "$STATE_ $MESSAGE" "error The server is busy, try again in a minute"
 ATRIO_TEST_WAIT=0 request ACTION=disk-test APP=atrio DEVICE=/dev/sdc KIND=short
 check "only a disk smartctl lists" is "$STATE_ $MESSAGE" "error The disk did not start the test"
 ATRIO_TEST_WAIT=0 request ACTION=disk-test APP=atrio DEVICE='/dev/sda;reboot' KIND=short

@@ -72,6 +72,8 @@ export default {
 			let run = []
 			const close = () => {
 				if (!run.length) return
+				// A point alone between gaps is drawn as a short dash, or it would not show
+				if (run.length === 1) run.push([run[0][0] + 2, run[0][1]])
 				const points = run.map(([px, py]) => `${px.toFixed(1)},${py.toFixed(1)}`)
 				line += `M${points.join('L')}`
 				area += `M${run[0][0].toFixed(1)},${this.height}L${points.join('L')}L${run[run.length - 1][0].toFixed(1)},${this.height}Z`
@@ -137,7 +139,7 @@ function niceCeil(value) {
 <template>
 	<div
 		:aria-label="$t('History charts: use the left and right arrows to move through time')" class="atrio-strips" role="group" tabindex="0"
-		@blur="hover = null" @keydown="onKey" @mouseleave="hover = null" @mousemove="move"
+		@blur="hover = null" @keydown="onKey" @pointerdown="move" @pointerleave="hover = null" @pointermove="move"
 	>
 		<ul class="atrio-strips-summary">
 			<li v-for="strip in strips" :key="strip.label">{{ summary(strip) }}</li>
@@ -273,6 +275,7 @@ function niceCeil(value) {
 
 .atrio-strip-peak {
 	color: var(--atrio-text-soft);
+	white-space: nowrap;
 	font-size: 0.75rem;
 	font-variant-numeric: tabular-nums;
 	line-height: 1.25;
@@ -318,7 +321,7 @@ function niceCeil(value) {
 
 @media (max-width: 480px) {
 	.atrio-strip {
-		grid-template-columns: 5.5rem minmax(0, 1fr) 3.75rem;
+		grid-template-columns: 6rem minmax(0, 1fr) 4.5rem;
 		gap: 0.5rem;
 	}
 }

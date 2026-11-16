@@ -10,7 +10,8 @@ echo "cpu  1 0 1 1 0 0 0 0 0 0" > "$ATRIO_PROC/stat"
 echo "0.1 0.1 0.1 1/1 1" > "$ATRIO_PROC/loadavg"
 add_app media redis:7 sha256:bbbb
 add_app home redis:7 sha256:bbbb
-docker_state "state['containers'][0].update(pid=101); state['containers'][1].update(pid=102); state['containers'][2].update(pid=1, mode='host')"
+add_app tunnel redis:7 sha256:bbbb
+docker_state "state['containers'][0].update(pid=101); state['containers'][1].update(pid=102); state['containers'][2].update(pid=1, mode='host'); state['containers'][3].update(pid=101, mode='container:aaaa')"
 # dev PID RX TX: the network of a container, with its loopback
 dev() {
 	printf 'Inter-|   Receive                                                |  Transmit\n face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed\n'
@@ -32,6 +33,7 @@ alerts
 check "an app's download over 5 minutes, exact, without its loopback" is "$(apps_row web 5)" 10000
 check "and its upload" is "$(apps_row web 6)" 2000
 check "an app with no traffic" is "$(apps_row media 5)" 0
+check "a container on another's network (network_mode: service) is not counted again" is "$(apps_row tunnel 5)" ""
 
 # The live measure: counters read twice a few seconds apart
 ( sleep 1; dev 101 4600000 800000 > "$ATRIO_PROC/101/net/dev"; server 6000000 1000000 ) &
@@ -89,4 +91,25 @@ alerts
 check "the history has the host-network app's rate" is "$(apps_row home 5)" 1000
 check "and the services', on their own lines" is "$(apps_row svc:smbd 5)" 1000
 check "the connections are kept root-only" is "$(stat -c %a "$ATRIO_STATE/net-sockets")" 600
+
+# ss reads nothing once: the last snapshot stays, and the next run counts from it, not from zero
+before=$(cat "$ATRIO_STATE/net-sockets")
+rm "$FAKE_DOCKER/sockets"
+sed -i "s/^sockets_time=.*/sockets_time=$(( $(date +%s) - 300 ))/" "$ATRIO_STATE/alerts-memory"
+alerts
+check "a failed read keeps the last connections" is "$(cat "$ATRIO_STATE/net-sockets")" "$before"
+sockets 1001000 302000 200600
+sed -i "s/^sockets_time=.*/sockets_time=$(( $(date +%s) - 600 ))/" "$ATRIO_STATE/alerts-memory"
+alerts
+check "and the next run counts from them" is "$(apps_row home 5)" 500
+
+# Busy: the timer's run holds the lock; the old measure is not shown as a new one
+( flock 9; sleep 4 ) 9>"$ATRIO_STATE/alerts.lock" &
+sleep 0.5
+printf '%s\n' ACTION=network APP=atrio > "$ATRIO_STATE/backup-request"
+ATRIO_LOCK_WAIT=1 bash "$SCRIPTS/atrio-backup" >/dev/null 2>&1
+wait
+read_status
+check "a busy server says so" is "$STATE_ $MESSAGE" "error The server is busy, try again in a minute"
+check "and the old measure is gone" test ! -e "$ATRIO_STATE/network.json"
 finish

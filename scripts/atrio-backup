@@ -1605,7 +1605,10 @@ case "$ACTION" in
 	network)
 		# Measured by atrio-alerts, which reads the same counters for the history
 		write_status running measuring
-		"$(dirname "$0")/atrio-alerts" --network >/dev/null 2>&1 || bash "$(dirname "$0")/atrio-alerts" --network >/dev/null 2>&1
+		# Gone first, so an old measure is never shown as a new one
+		rm -f "$STATE/network.json"
+		bash "$(dirname "$0")/atrio-alerts" --network >/dev/null 2>&1
+		[ $? -eq 75 ] && fail "The server is busy, try again in a minute"
 		[ -s "$STATE/network.json" ] || fail "The network could not be measured"
 		write_status done "" ""
 		;;
@@ -1617,6 +1620,7 @@ case "$ACTION" in
 		case $? in
 			0) write_status done "" "" ;;
 			2) fail "A test is already running on this disk" ;;
+			75) fail "The server is busy, try again in a minute" ;;
 			*) fail "The disk did not start the test" ;;
 		esac
 		;;

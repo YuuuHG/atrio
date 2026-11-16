@@ -97,7 +97,8 @@ export default {
 			this.error = ''
 			this.$nextTick(() => this.$refs.sheet?.focus())
 			this.loadGrid()
-			loadDayTraffic().then((day) => (this.day = day))
+			// false: an older service that keeps no history
+			loadDayTraffic().then((day) => (this.day = day ?? false))
 			if (!(await backupsInstalled())) {
 				this.error = this.$t('This needs the service on the server. Run the install command on the server.')
 				return
@@ -107,6 +108,8 @@ export default {
 		close() {
 			this.open = false
 			clearTimeout(this.timer)
+			// A measure still on its way when the panel closes must not start another round
+			this.round = (this.round || 0) + 1
 			this.$nextTick(() => restoreFocus(this.returnFocus))
 		},
 		onKey(event) {
@@ -125,7 +128,8 @@ export default {
 			}
 		},
 		async measure() {
-			if (!this.open) return
+			if (!this.open || this.measuring) return
+			const round = this.round
 			this.measuring = true
 			try {
 				this.now = await measureNetwork()
@@ -139,6 +143,11 @@ export default {
 			finally {
 				this.measuring = false
 			}
+			// Closed (and maybe opened again) meanwhile: the new opening has its own round
+			if (round !== this.round) {
+				if (this.open) this.measure()
+				return
+			}
 			if (this.open && !this.error) this.timer = setTimeout(this.measure, REFRESH_MS)
 		},
 		title(app) {
@@ -151,7 +160,8 @@ export default {
 			return (item.down || 0) + (item.up || 0)
 		},
 		value(bytes) {
-			return this.mode === 'now' ? `${renderSize(bytes)}/s` : renderSize(bytes)
+			const size = renderSize(Math.round(bytes || 0)).replace(' Bytes', ' B')
+			return this.mode === 'now' ? `${size}/s` : size
 		},
 		color(app) {
 			const index = this.busyApps.findIndex((a) => a.app === app)
@@ -185,6 +195,7 @@ export default {
 					</div>
 
 					<p v-if="error && mode === 'now'" class="atrio-network-error" role="alert">{{ error }}</p>
+					<p v-else-if="mode === 'day' && day === false" class="atrio-config-empty">{{ $t('The last 24 hours need the latest version of the service on the server. Run the install command once more.') }}</p>
 					<p v-else-if="!data" class="atrio-config-empty">{{ mode === 'now' ? $t('Measuring…') : $t('Loading…') }}</p>
 
 					<template v-else>
@@ -236,7 +247,7 @@ export default {
 									<td>{{ value(item.up) }}</td>
 								</tr>
 								<tr v-if="!busyApps.length">
-									<td class="atrio-network-none" colspan="4">{{ $t('No app is using the network now.') }}</td>
+									<td class="atrio-network-none" colspan="4">{{ mode === 'now' ? $t('No app is using the network now.') : $t('No app used the network in the last 24 hours.') }}</td>
 								</tr>
 								<template v-if="showQuiet">
 									<tr v-for="item in quietApps" :key="item.app" class="is-quiet">
@@ -253,12 +264,12 @@ export default {
 							<tbody v-else>
 								<tr v-for="item in services" :key="item.name">
 									<td class="atrio-network-pic"><b-icon :icon="item.icon" pack="mdi" size="is-20" /></td>
-									<td>{{ $t(item.name) }}</td>
+									<td>{{ $te(item.name) ? $t(item.name) : item.name }}</td>
 									<td>{{ value(item.down) }}</td>
 									<td>{{ value(item.up) }}</td>
 								</tr>
 								<tr v-if="!services.length">
-									<td class="atrio-network-none" colspan="4">{{ $t('No service of the server is using the network now.') }}</td>
+									<td class="atrio-network-none" colspan="4">{{ mode === 'now' ? $t('No service of the server is using the network now.') : $t('No service of the server used the network in the last 24 hours.') }}</td>
 								</tr>
 							</tbody>
 						</table>
@@ -365,6 +376,7 @@ export default {
 
 .atrio-network-share {
 	display: flex;
+	flex: none;
 	gap: 2px;
 	height: 10px;
 	overflow: hidden;
@@ -421,7 +433,9 @@ export default {
 	th:nth-child(n + 2),
 	td:nth-child(n + 3) {
 		width: 6.5rem;
+		padding-left: 0.5rem;
 		text-align: right;
+		white-space: nowrap;
 		font-variant-numeric: tabular-nums;
 	}
 

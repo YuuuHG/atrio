@@ -79,6 +79,35 @@ export default {
 		}
 	},
 	computed: {
+		// The strips of the history, in the order of the panel above them
+		historyTimes() {
+			return this.column('time')
+		},
+		historyRows() {
+			// One hue: each strip is a single measure, named on its left
+			const [cpu] = this.colors
+			return [
+				{ label: this.$t('Processor'), values: this.column('cpu'), format: this.percent, color: cpu, max: 100 },
+				{ label: this.$t('Memory'), values: this.column('memory'), format: this.percent, color: cpu, max: 100 },
+				{ label: this.$t('Received'), values: this.column('down'), format: this.rate, color: cpu, min: 1024 },
+				{ label: this.$t('Sent'), values: this.column('up'), format: this.rate, color: cpu, min: 1024 },
+				{ label: this.$t('Processor °C'), values: this.column('cpuTemp'), format: this.degrees, color: cpu, fit: true },
+				{ label: this.$t('Hottest disk'), values: this.column('diskTemp'), format: this.degrees, color: cpu, fit: true },
+			].filter((row) => row.values.some((value) => value !== null))
+		},
+		// One line per disk that has points, named by its model (and device when two share it)
+		diskTempRows() {
+			if (!this.diskTemps || this.diskTemps.times.length < 2 || !this.disks) return []
+			const models = this.disks.map((disk) => disk.model)
+			return this.disks.filter((disk) => this.diskTemps.disks[diskId(disk)]?.some((value) => value !== null))
+				.map((disk) => ({
+					label: models.filter((model) => model === disk.model).length > 1 ? `${disk.model} (${disk.device})` : disk.model || disk.device,
+					color: this.colors[0],
+					values: this.diskTemps.disks[diskId(disk)],
+					format: this.degrees,
+					fit: true,
+				}))
+		},
 		sections() {
 			return SECTIONS.map((section) => ({
 				...section,
@@ -108,7 +137,7 @@ export default {
 		renderSize,
 		// `section`: 'disks' scrolls to the disks once they are there
 		async show(section) {
-			if (section === 'disks') this.scrollToDisks = true
+			this.scrollToDisks = section === 'disks'
 			if (this.open) return
 			this.returnFocus = document.activeElement
 			this.open = true
@@ -132,6 +161,7 @@ export default {
 		},
 		close() {
 			this.open = false
+			this.scrollToDisks = false
 			clearInterval(this.timer)
 			this.$nextTick(() => restoreFocus(this.returnFocus))
 		},
@@ -151,7 +181,11 @@ export default {
 			}
 		},
 		async loadHistory() {
+			// Quick clicks on 24 hours / 7 days: only the latest answer counts
+			const request = (this.historyRequest || 0) + 1
+			this.historyRequest = request
 			const [rows, diskTemps] = await Promise.all([loadHistory(this.range), loadDiskTemps(this.range)])
+			if (request !== this.historyRequest) return
 			this.history = rows === null ? false : rows
 			this.diskTemps = diskTemps
 			this.revealDisks()
@@ -170,32 +204,6 @@ export default {
 			this.range = hours
 			this.loadHistory()
 		},
-		// The strips of the history, in the order of the panel above them
-		historyRows() {
-			// One hue: each strip is a single measure, named on its left
-			const [cpu] = this.colors
-			return [
-				{ label: this.$t('Processor'), values: this.column('cpu'), format: this.percent, color: cpu, max: 100 },
-				{ label: this.$t('Memory'), values: this.column('memory'), format: this.percent, color: cpu, max: 100 },
-				{ label: this.$t('Received'), values: this.column('down'), format: this.rate, color: cpu, min: 1024 },
-				{ label: this.$t('Sent'), values: this.column('up'), format: this.rate, color: cpu, min: 1024 },
-				{ label: this.$t('Processor °C'), values: this.column('cpuTemp'), format: this.degrees, color: cpu, fit: true },
-				{ label: this.$t('Hottest disk °C'), values: this.column('diskTemp'), format: this.degrees, color: cpu, fit: true },
-			].filter((row) => row.values.some((value) => value !== null))
-		},
-		// One line per disk that has points, named by its model (and device when two share it)
-		diskTempSeries() {
-			if (!this.diskTemps || this.diskTemps.times.length < 2 || !this.disks) return []
-			const models = this.disks.map((disk) => disk.model)
-			return this.disks.filter((disk) => this.diskTemps.disks[diskId(disk)]?.some((value) => value !== null))
-				.map((disk) => ({
-					label: models.filter((model) => model === disk.model).length > 1 ? `${disk.model} (${disk.device})` : disk.model || disk.device,
-					color: this.colors[0],
-					values: this.diskTemps.disks[diskId(disk)],
-					format: this.degrees,
-					fit: true,
-				}))
-		},
 		column(key) {
 			return (this.history || []).map((row) => row[key])
 		},
@@ -203,7 +211,7 @@ export default {
 			return `${Math.round(value)}%`
 		},
 		rate(value) {
-			return `${renderSize(value)}/s`
+			return `${renderSize(Math.round(value || 0)).replace(' Bytes', ' B')}/s`
 		},
 		degrees(value) {
 			return this.temperature(value)
@@ -232,7 +240,8 @@ export default {
 		async setAutoTests(on) {
 			this.savingAutoTests = true
 			try {
-				const res = await this.$api.file.getContent(ALERTS_CONF)
+				// A missing file can come back as an error as well as a failed answer
+				const res = await this.$api.file.getContent(ALERTS_CONF).catch(() => ({ data: {} }))
 				const exists = res.data.success === 200
 				const lines = (exists ? res.data.data || '' : '').split('\n').filter((line) => line && !line.startsWith('SELFTEST='))
 				lines.push(`SELFTEST=${on ? 1 : 0}`)
@@ -474,7 +483,7 @@ export default {
 							</div>
 							<p v-if="history === null" class="atrio-hardware-muted">{{ $t('Loading…') }}</p>
 							<template v-else>
-								<HistoryStrips :rows="historyRows()" :times="column('time')" />
+								<HistoryStrips :rows="historyRows" :times="historyTimes" />
 							</template>
 							<template v-if="appUsage.length">
 								<h4 class="atrio-hardware-apps-title">{{ $t('Apps now') }}</h4>
@@ -533,9 +542,9 @@ export default {
 									</button>
 								</div>
 							</div>
-							<div v-if="diskTempSeries().length" class="atrio-hardware-disk-chart">
+							<div v-if="diskTempRows.length" class="atrio-hardware-disk-chart">
 								<h4 class="atrio-hardware-apps-title">{{ range > 24 ? $t('Disk temperatures, last 7 days') : $t('Disk temperatures, last 24 hours') }}</h4>
-								<HistoryStrips :rows="diskTempSeries()" :times="diskTemps.times" />
+								<HistoryStrips :rows="diskTempRows" :times="diskTemps.times" />
 							</div>
 							<p class="atrio-hardware-muted">{{ $t('Read from SMART every hour, without waking disks that sleep. A disk that gets worse sends a push alert.') }}</p>
 							<label v-if="disks.some(canTest)" class="atrio-hardware-autotest">
@@ -689,6 +698,13 @@ export default {
 
 	.atrio-sheet-info {
 		margin-top: 0.5rem;
+
+		// On a phone the device line and the self-test result wrap instead of being cut
+		dd {
+			overflow: visible;
+			white-space: normal;
+			overflow-wrap: anywhere;
+		}
 	}
 }
 
