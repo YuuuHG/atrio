@@ -245,11 +245,13 @@ export async function ensureUpdater() {
 	if (installed === null) return 'no'
 	if (installed === shipped) return 'ok'
 	// Never written over while it runs: old updaters are read by bash as it goes, so a new text
-	// under a running one would run pieces of it. Not while one runs, nor in the minute after one
-	// finished (it still writes its log); a "running" left by an updater that died is stale after 15 minutes.
+	// under a running one would run pieces of it. Not while one runs, nor in the two minutes after one
+	// finished: it still writes its log, and the new web UI it put in starts its restore unit, which
+	// sleeps 30 seconds before it looks and leaves. A "running" left by an updater that died is
+	// stale after 15 minutes.
 	const status = await readStatus()
 	const age = status ? Date.now() - Date.parse(status.time) : Infinity
-	if (age < 60 * 1000 || (status?.state === 'running' && age < 15 * 60 * 1000)) return 'busy'
+	if (age < 2 * 60 * 1000 || (status?.state === 'running' && age < 15 * 60 * 1000)) return 'busy'
 	try {
 		const written = await api.file.update(UPDATER, shipped)
 		if (written.data.success !== 200) return 'no'
