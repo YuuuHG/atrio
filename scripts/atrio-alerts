@@ -370,7 +370,8 @@ smart_verdict() {
 	elif [ "${n:-0}" -gt 0 ]; then [ "$verdict" = good ] && verdict=watch; add reallocated
 	fi
 	n=$(smart_get "$v" USED); [ "${n:-0}" -ge 80 ] && [ "${n:-0}" -lt 100 ] && { [ "$verdict" = good ] && verdict=watch; add wearing; }
-	n=$(smart_get "$v" CRC); [ "${n:-0}" -gt 0 ] && { [ "$verdict" = good ] && verdict=watch; add cable; }
+	# The counter never goes back to zero: only errors that came lately are worth a look
+	[ "${CRC_RECENT:-0}" = 1 ] && { [ "$verdict" = good ] && verdict=watch; add cable; }
 	local limit=55
 	[ "$(smart_get "$v" KIND)" = nvme ] && limit=70
 	n=$(smart_get "$v" TEMP); [ "${n:-0}" -ge "$limit" ] && { [ "$verdict" = good ] && verdict=watch; add hot; }
@@ -397,18 +398,46 @@ check_disk_health() {
 	fi
 	touch "$DISKS_TSV"
 	TESTING=0
+	local present=" "
 	while read -r device _ type _; do
 		[[ "$device" =~ ^/dev/[A-Za-z0-9/_-]+$ ]] && [[ "$type" =~ ^[A-Za-z0-9,_+-]+$ ]] || continue
+		# Asleep disks are still listed by the scan: they keep their last data below
+		present+="$device "
 		read_disk "$device" "$type" || continue
 		[ -n "$(smart_get "$DISK_VALUES" RUNNING)" ] && TESTING=1
 		[ "$SELFTEST" = 1 ] && schedule_selftest "$device" "$type"
 	done < <(LC_ALL=C timeout 60 smartctl --scan-open 2>/dev/null | grep -v '^#')
 	memory_set disks_testing "$TESTING"
+	# A disk the scan no longer finds was unplugged: off the list. Not when the scan found nothing
+	# at all, which is more likely smartctl failing than every disk gone.
+	if [ "$present" != " " ]; then
+		awk -F'\t' -v present="$present" 'index(present, " " $1 " ")' "$DISKS_TSV" > "$DISKS_TSV.tmp"
+		mv "$DISKS_TSV.tmp" "$DISKS_TSV"
+	fi
 	if [ -f "$DISKS_HISTORY" ]; then
 		keep_since "$DISKS_HISTORY" $((now - 7 * 86400))
 		chmod 644 "$DISKS_HISTORY"
 	fi
 	write_disks
+}
+
+# Cable (CRC) errors add up for the whole life of a disk and never reset, so one old error would keep
+# a disk on "keep an eye on it" forever. Remembered as "count time it last grew": 1 when it grew in
+# the last week. Errors already there when Atrio first reads the disk count as old.
+CRC_FRESH=$((7 * 86400))
+crc_recent() {
+	local count="$1" key="crc_$DISK_ID" stored now
+	[[ "$count" =~ ^[0-9]+$ ]] || { echo 0; return; }
+	now=$(date +%s)
+	stored=$(memory_get "$key")
+	if [ -z "$stored" ] || [ "$count" -lt "${stored%% *}" ]; then
+		memory_set "$key" "$count 0"
+	elif [ "$count" -gt "${stored%% *}" ]; then
+		memory_set "$key" "$count $now"
+	fi
+	stored=$(memory_get "$key")
+	local since="${stored##* }"
+	[ "$since" -gt 0 ] && [ $((now - since)) -lt "$CRC_FRESH" ] && echo 1 || echo 0
 }
 
 # One disk: its SMART data and self-tests, the verdict, and its line in disks.tsv. Fails when it sleeps.
@@ -424,11 +453,12 @@ read_disk() {
 	# Asleep: the data of the last check stay
 	[ $((code & 2)) -ne 0 ] && printf '%s' "$out" | grep -qi standby && return 1
 	values=$(printf '%s\n' "$out" | smart_values)
+	serial=$(smart_get "$values" SERIAL)
+	DISK_ID=$(printf '%s' "${serial:-$device}" | tr -c 'A-Za-z0-9' '_')
+	CRC_RECENT=$(crc_recent "$(smart_get "$values" CRC)")
 	line=$(smart_verdict "$values")
 	verdict="${line%%$'\t'*}"
 	reasons="${line#*$'\t'}"
-	serial=$(smart_get "$values" SERIAL)
-	DISK_ID=$(printf '%s' "${serial:-$device}" | tr -c 'A-Za-z0-9' '_')
 	DISK_VALUES="$values"
 	key="disk_verdict_$DISK_ID"
 	before=$(memory_get "$key")

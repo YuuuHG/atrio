@@ -13,6 +13,10 @@ What changes in each Atrio release. The section for a version is also the text o
 
 **Fixed**
 
+- **Disks in the hardware panel** (#10): a disk that was unplugged stayed in the list for good; it goes away at the
+  next hourly check now. And one old cable error kept a disk on "Keep an eye on it" forever, since that counter
+  never goes back to zero: only cable errors that came in the last week count now, while the number stays shown.
+  Run the install command once more to get it.
 - **App settings and install:** a port range like 8000-8010 was cut to its last port, or to its first in the
   Container field, and ports such as 0 or 99999 passed the check; two clicks on Save sent the settings twice; an app
   in the App Store whose details could not be read left the store under its loading overlay; an error with no answer

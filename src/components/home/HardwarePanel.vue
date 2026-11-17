@@ -28,7 +28,7 @@ const REASONS = {
 	'reallocated-many': 'Many sectors were replaced by spare ones.',
 	'reallocated': 'Some sectors were replaced by spare ones: keep an eye on whether the number grows.',
 	'wearing': 'Most of its rated write endurance is used.',
-	'cable': 'Transfer errors between the disk and the computer: often a loose or worn cable.',
+	'cable': 'New transfer errors between the disk and the computer this week: often a loose or worn cable.',
 	'hot': 'It runs hot.',
 	'old': 'Over 50,000 hours powered on.',
 }
