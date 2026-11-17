@@ -4,6 +4,22 @@ What changes in each Atrio release. The section for a version is also the text o
 
 ## 0.1.24 — unreleased
 
+**New**
+
+- **The services on the server update themselves, with no command to run, on every install.** Installs made
+  before 0.1.17 only ever updated the web UI, so their backups, push alerts and checks stayed old unless someone ran
+  the install command again. Now each release carries its updater and public key inside the web UI, and when Atrio
+  sees that the services on the server are behind, it puts that updater in place of the old one through CasaOS and
+  asks for an update: the services are brought up to date and, on installs that had none, the release key is
+  adopted, so every later release must be signed with it. It stays on for good, so whatever leaves the services
+  behind (an old install, an update cut short) is put right the next time Atrio is opened. The install command is
+  only shown when this cannot work on that server.
+- **Safer updates**, after a study of how Pi-hole, Netdata, Home Assistant, Umbrel and others update themselves:
+  the web UI and the services come from the same release, looked up once; the services carry their version, signed,
+  and the services of another release are refused; a setup of the services that fails half way puts the previous
+  ones back; after a CasaOS update, Atrio never comes back as a release older than one installed before; and the
+  updater is read whole before it runs, so it can be replaced safely while it works.
+
 **Changed**
 
 - **Restart and shut down** show a full-page screen in the style of the Atrio update, in place of CasaOS's small
@@ -16,7 +32,6 @@ What changes in each Atrio release. The section for a version is also the text o
 - **Disks in the hardware panel** (#10): a disk that was unplugged stayed in the list for good; it goes away at the
   next hourly check now. And one old cable error kept a disk on "Keep an eye on it" forever, since that counter
   never goes back to zero: only cable errors that came in the last week count now, while the number stays shown.
-  Run the install command once more to get it.
 - **App settings and install:** a port range like 8000-8010 was cut to its last port, or to its first in the
   Container field, and ports such as 0 or 99999 passed the check; two clicks on Save sent the settings twice; an app
   in the App Store whose details could not be read left the store under its loading overlay; an error with no answer

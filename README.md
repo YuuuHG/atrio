@@ -102,13 +102,21 @@ A red dot on the settings icon (the sliders at the top) tells you a new release 
 **Updates**, the **Atrio** row shows your version and an **Update** button. Atrio asks the updater on the server to
 download the release from GitHub, checks its signature and installs it, showing each step, then reloads the page.
 The services on the server (updater, push alerts, backups) are updated with it, from a bundle signed with the same
-key. Installs made before Atrio 0.1.17 update only the web UI: run the install command once more to get this.
+key.
+
+Older installs need no command either. Their updater only installs the web UI, but each release carries its own
+updater and public key, and the web UI, which those servers do receive, puts that updater in place of the old one
+through CasaOS and asks for an update: the services are then brought up to date, and from then on every release
+must be signed with the key. This stays on for good: whenever the services on the server are behind the web UI,
+for whatever reason, Atrio puts them right by itself the next time it is opened. Only when that cannot work (for
+example a CasaOS whose file manager is limited to some folders) does Atrio show the install command to run.
 
 From a terminal you can do the same with `sudo atrio-update`.
 
 Updating CasaOS puts its own UI back. About half a minute later the updater notices it, saves that newer CasaOS UI
 as the copy used by the uninstaller, and installs Atrio again (from the last release it kept, if GitHub cannot be
-reached). Installs made before Atrio 0.1.4 lack this: run the install command once more to add it.
+reached), never a release older than one installed before. Installs made before Atrio 0.1.4 get this too, once
+Atrio has brought their services up to date.
 
 ## Moving to a new machine
 

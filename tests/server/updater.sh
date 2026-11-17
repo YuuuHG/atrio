@@ -17,6 +17,7 @@ tar -czf "$SB/rel/atrio.tar.gz" -C "$SB/build" .
 (cd "$SB/rel" && sha256sum atrio.tar.gz > atrio.tar.gz.sha256)
 mkdir "$SB/server" && cp "$SCRIPTS"/atrio-update "$SCRIPTS"/atrio-alerts "$SCRIPTS"/atrio-backup "$SCRIPTS"/atrio-setup "$SB/server/"
 cp "$SB/key.gpg" "$SB/server/atrio-release-key.gpg"
+echo 9.9.9 > "$SB/server/VERSION"
 tar -czf "$SB/rel/atrio-server.tar.gz" -C "$SB/server" .
 for file in atrio.tar.gz atrio-server.tar.gz; do gpg --batch --yes --detach-sign -o "$SB/rel/$file.sig" "$SB/rel/$file"; done
 export ATRIO_DOWNLOAD="file://$SB/rel" ATRIO_RELEASE_KEY="$SB/key.gpg"
@@ -90,6 +91,16 @@ echo '{"version":"10.0.0"}' > "$ATRIO_WWW/atrio-version.json"
 update
 check "an older release on GitHub is refused" is "$(status)" "The release on GitHub (9.9.9) is older than the installed one (10.0.0): nothing was changed"
 check "and the web UI is left as it is" has "$ATRIO_WWW/atrio-version.json" 10.0.0
+
+# After a CasaOS update, the restore never goes back below the newest release installed before
+echo '<html>CasaOS</html>' > "$ATRIO_WWW/index.html"
+echo 10.0.0 > "$ATRIO_STATE/highest-version"
+ATRIO_RESTORE_DELAY=0 bash "$SCRIPTS/atrio-update" --restore >/dev/null 2>&1
+check "a restore refuses a release older than one installed before" is "$(status)" "The release on GitHub (9.9.9) is older than one installed before (10.0.0): nothing was changed"
+echo 9.9.9 > "$ATRIO_STATE/highest-version"
+ATRIO_RESTORE_DELAY=0 bash "$SCRIPTS/atrio-update" --restore >/dev/null 2>&1
+check "and puts back the same release" has "$ATRIO_WWW/index.html" Atrio
+echo '{"version":"10.0.0"}' > "$ATRIO_WWW/atrio-version.json"
 
 # Another update running: this one waits, and when it gives up leaves no request for the path unit
 echo token > "$ATRIO_STATE/update-request"

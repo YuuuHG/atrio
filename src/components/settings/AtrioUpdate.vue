@@ -3,13 +3,13 @@
 // The check and the update live in plugins/atrioRelease, shared with the settings icon dot and
 // the full-page progress screen.
 import { copyText } from '@/plugins/copyText'
-import { CURRENT, INSTALL_COMMAND, checkLatest, checkServices, release, services, startUpdate, updateAvailable } from '@/plugins/atrioRelease'
+import { CURRENT, INSTALL_COMMAND, checkLatest, checkServices, release, repair, repairServer, services, startUpdate, updateAvailable } from '@/plugins/atrioRelease'
 
 export default {
 	name: 'AtrioUpdate',
 	compatConfig: { MODE: 3 },
 	data() {
-		return { current: CURRENT, release, services, install: INSTALL_COMMAND }
+		return { current: CURRENT, release, services, repair, install: INSTALL_COMMAND }
 	},
 	computed: {
 		dev() {
@@ -27,7 +27,7 @@ export default {
 	},
 	mounted() {
 		checkLatest()
-		checkServices()
+		checkServices().then((outdated) => outdated && repairServer())
 	},
 	methods: {
 		update() {
@@ -68,11 +68,20 @@ export default {
 			</template>
 		</div>
 
-		<!-- Services older than the web UI: installs made before 0.1.17 update the web UI only -->
-		<div v-if="services.outdated && !dev" class="atrio-update-services pl-55 ml-1" role="alert">
-			<p>{{ $t('The services on the server (updates, backups, push alerts) are older than this version, so some features do not work yet. Run this command once on the server; after that, updates bring them too:') }}</p>
-			<button :title="$t('Copy')" class="atrio-update-services-code" type="button" @click="copyInstall">{{ install }}</button>
-		</div>
+		<!-- Services older than the web UI: Atrio brings them up to date by itself (repairServer) -->
+		<template v-if="services.outdated && !dev">
+			<p v-if="repair.running" class="atrio-update-services atrio-update-services-ok pl-55 ml-1" role="status">
+				{{ $t('Bringing the services on the server up to date…') }}
+			</p>
+			<div v-else-if="repair.failed" class="atrio-update-services pl-55 ml-1" role="alert">
+				<p>{{ $t('The services on the server (updates, backups, push alerts) are older than this version, and Atrio could not bring them up to date by itself. Run this command once on the server:') }}</p>
+				<button :title="$t('Copy')" class="atrio-update-services-code" type="button" @click="copyInstall">{{ install }}</button>
+				<p v-if="repair.message" class="mt-1">{{ repair.message }}</p>
+			</div>
+			<p v-else-if="updateAvailable" class="atrio-update-services atrio-update-services-ok pl-55 ml-1">
+				{{ $t('The update also brings the services on the server up to date.') }}
+			</p>
+		</template>
 	</div>
 </template>
 
@@ -83,6 +92,10 @@ export default {
 	color: #fcd34d;
 	font-size: 0.75rem;
 	line-height: 1.4;
+}
+
+.atrio-update-services-ok {
+	color: var(--atrio-text-soft, #cbd5e1);
 }
 
 .atrio-update-services-code {

@@ -2,7 +2,7 @@
 // Collects notifications from the message bus and the update checks, and shows them in a side
 // panel opened with `$EventBus.$emit('atrio:open-notifications')` (the bell in the header).
 import { ice_i18n } from '@/mixins/base/common-i18n'
-import { CURRENT, INSTALL_COMMAND, checkLatest, checkServices, release, updateAvailable } from '@/plugins/atrioRelease'
+import { CURRENT, INSTALL_COMMAND, checkLatest, release, repair, repairServer, updateAvailable } from '@/plugins/atrioRelease'
 import { restoreFocus, trapTab } from '@/plugins/focusTrap'
 import { clearNotifications, hasNotification, markAllRead, notifications, notify, removeNotification } from '@/plugins/notifications'
 import ActivityList from '@/components/home/ActivityList.vue'
@@ -133,9 +133,19 @@ export default {
 				else if (cpu.temperature < COOL) this.hot = false
 			}
 		},
-		// Installs made before 0.1.17 update the web UI only: once per version, say how to bring the services
+		// Services older than this web UI are brought up to date from here (repairServer); only when
+		// that cannot work, once per version, the install command
 		async checkServices() {
-			if (!(await checkServices()) || hasNotification(`services-${CURRENT}`)) return
+			await repairServer()
+			if (repair.done && !hasNotification(`services-done-${CURRENT}`)) {
+				notify({
+					key: `services-done-${CURRENT}`,
+					level: 'info',
+					title: this.$t('The services on the server were brought up to date'),
+					body: this.$t('Backups, push alerts and updates now match Atrio {version}.', { version: CURRENT }),
+				})
+			}
+			if (!repair.failed || hasNotification(`services-${CURRENT}`)) return
 			notify({
 				key: `services-${CURRENT}`,
 				level: 'warning',

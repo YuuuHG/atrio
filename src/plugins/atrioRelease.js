@@ -115,6 +115,18 @@ function stepOf(message, current) {
 
 let pollTimer
 
+// The updater sees the request file appear (a systemd path unit) and copies the token into its status
+async function writeRequest(token) {
+	const request = `${STATE}/update-request.tmp`
+	// A copy left by an earlier try that failed halfway is simply written over
+	await api.file.create(request).catch(() => {})
+	const written = await api.file.update(request, token)
+	if (written.data.success !== 200) throw new Error('request')
+	// Renamed in place so the updater only ever sees a complete request
+	const renamed = await api.file.rename(request, `${STATE}/update-request`)
+	if (renamed.data.success !== 200) throw new Error('request')
+}
+
 /** Starts the update on the server and follows it until the page reloads or it fails. */
 export async function startUpdate() {
 	if (release.run && !release.run.error) return
@@ -123,14 +135,10 @@ export async function startUpdate() {
 	// The updater copies this token into its status, so we know the status is about this run
 	const token = `${started.toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 	try {
-		const request = `${STATE}/update-request.tmp`
-		// A copy left by an earlier try that failed halfway is simply written over
-		await api.file.create(request).catch(() => {})
-		const written = await api.file.update(request, token)
-		if (written.data.success !== 200) throw new Error('request')
-		// Renamed in place so the updater only ever sees a complete request
-		const renamed = await api.file.rename(request, `${STATE}/update-request`)
-		if (renamed.data.success !== 200) throw new Error('request')
+		// Services older than this web UI: the updater it ships goes in first, so that this update
+		// brings the services too, even on a server whose updater only knows the web UI
+		if (await checkServices()) await ensureUpdater()
+		await writeRequest(token)
 	}
 	catch (e) {
 		release.run.error = 'Could not reach the updater on the server'
@@ -164,13 +172,14 @@ export async function startUpdate() {
 }
 
 // The services on the server (updater, push alerts, backups) of the version they came with: the updater
-// writes it since 0.1.17, so older installs, which update the web UI only, have none. Then the install
-// command has to run once more, and the web UI says so.
+// writes it since 0.1.17, so older installs, which update the web UI only, have none. repairServer
+// below brings them up to date; the install command is only shown when that cannot work.
 export const INSTALL_COMMAND = 'curl -fsSL https://raw.githubusercontent.com/peppeaiello/atrio/main/scripts/install.sh | sudo bash'
 export const services = reactive({ outdated: false, checked: false })
 
-export async function checkServices() {
-	if (import.meta.env.DEV || services.checked) return services.outdated
+/** true when the services on the server are older than this web UI. `force` reads them again. */
+export async function checkServices({ force = false } = {}) {
+	if (import.meta.env.DEV || (services.checked && !force)) return services.outdated
 	try {
 		const res = await api.file.getContent(`${STATE}/server-version`)
 		const version = res.data.success === 200 ? String(res.data.data ?? '').trim() : ''
@@ -187,6 +196,152 @@ export async function checkServices() {
 		}
 	}
 	return services.outdated
+}
+
+/*
+ * Self-repair of the services on the server, with no command to run.
+ *
+ * The updater that runs on the server is the one installed with Atrio. Old ones (before 0.1.17) only
+ * install the web UI, so the server's services stayed old forever, unless someone ran the install
+ * command again. But the web UI does arrive, and through the CasaOS file API (which runs as root) it
+ * can write the updater: each release ships its updater and public key in www/server
+ * (scripts/release.sh). When the services are older than this web UI, the web UI writes that
+ * updater over the installed one (in place, so it stays root's and executable) and asks for an
+ * update. The new updater adopts the key if the server has none, checks the release's signature and
+ * installs its services (scripts/atrio-update). It stays on for good: whatever left the services
+ * behind (an old install, an update cut short, a mistake of ours in an updater), the next visit
+ * puts them right. Only when that cannot work does the web UI show the install command.
+ */
+const UPDATER = '/usr/local/bin/atrio-update'
+const SHIPPED = '/var/lib/casaos/www/server/atrio-update'
+// "version time" of the last try, shared by every browser: one try every few hours, not every page load
+const REPAIR_MARK = `${STATE}/repair-attempt`
+const REPAIR_EVERY_MS = 6 * 60 * 60 * 1000
+const REPAIR_TIMEOUT_MS = 10 * 60 * 1000
+// running: a repair is under way; failed: it cannot work here, the install command is the way
+// done: this visit brought them up to date
+export const repair = reactive({ running: false, failed: false, done: false, message: '' })
+
+async function readText(path) {
+	try {
+		const res = await api.file.getContent(path)
+		return res.data.success === 200 ? String(res.data.data ?? '') : null
+	}
+	catch (e) {
+		return null
+	}
+}
+
+/**
+ * Puts the updater shipped with this web UI in place of the installed one. 'ok' when it is there,
+ * 'busy' when an update runs (try later), 'no' when it cannot be done on this server.
+ */
+export async function ensureUpdater() {
+	const shipped = await readText(SHIPPED)
+	// A web UI without it (a development build, or one put back by CasaOS) has nothing to give
+	if (!shipped || !shipped.startsWith('#!/bin/bash\n')) return 'no'
+	const installed = await readText(UPDATER)
+	// No updater at all: there is no systemd unit to run one either
+	if (installed === null) return 'no'
+	if (installed === shipped) return 'ok'
+	// Never written over while it runs: old updaters are read by bash as it goes, so a new text
+	// under a running one would run pieces of it. Not while one runs, nor in the minute after one
+	// finished (it still writes its log); a "running" left by an updater that died is stale after 15 minutes.
+	const status = await readStatus()
+	const age = status ? Date.now() - Date.parse(status.time) : Infinity
+	if (age < 60 * 1000 || (status?.state === 'running' && age < 15 * 60 * 1000)) return 'busy'
+	try {
+		const written = await api.file.update(UPDATER, shipped)
+		if (written.data.success !== 200) return 'no'
+	}
+	catch (e) {
+		return 'no'
+	}
+	// Read back: the request below must only ever start a complete updater
+	if ((await readText(UPDATER)) === shipped) return 'ok'
+	// Something else ended up there: the old one goes back, as it was
+	await api.file.update(UPDATER, installed).catch(() => {})
+	return 'no'
+}
+
+async function markRepair() {
+	await api.file.create(REPAIR_MARK).catch(() => {})
+	await api.file.update(REPAIR_MARK, `${CURRENT} ${Date.now()}`).catch(() => {})
+}
+
+// How long ago this version was last tried, Infinity when never
+async function lastTry() {
+	const [version, time] = String((await readText(REPAIR_MARK)) ?? '').trim().split(' ')
+	const ago = Date.now() - Number(time)
+	return version === CURRENT && ago >= 0 ? ago : Infinity
+}
+
+function waitForUpdater(token) {
+	const started = Date.now()
+	return new Promise((resolve) => {
+		const poll = async () => {
+			const status = await readStatus()
+			if (status?.token === token && (status.state === 'done' || status.state === 'error')) return resolve(status)
+			if (Date.now() - started > REPAIR_TIMEOUT_MS) return resolve(null)
+			setTimeout(poll, POLL_MS)
+		}
+		setTimeout(poll, POLL_MS)
+	})
+}
+
+/**
+ * Brings the services on the server up to this web UI's version, when they are behind. Run on every
+ * page load; most of the time it only reads one small file.
+ */
+let repairing = null
+export function repairServer() {
+	// The notification center and the settings both ask: one repair at a time
+	if (!repairing) repairing = runRepair().finally(() => { repairing = null })
+	return repairing
+}
+
+async function runRepair() {
+	if (import.meta.env.DEV || repair.running) return
+	if (!(await checkServices())) return
+	// Only when this web UI is the latest release: otherwise the update offered in the settings does
+	// it (startUpdate puts the new updater in first), and brings the newer web UI with it
+	await checkLatest()
+	if (!release.latest || isNewer(release.latest, CURRENT) || isNewer(CURRENT, release.latest)) return
+	if (release.run) return
+	const ago = await lastTry()
+	// Under way in another browser or tab
+	if (ago < REPAIR_TIMEOUT_MS) return
+	if (ago < REPAIR_EVERY_MS) {
+		// Tried a while ago and the services are still behind: it does not work on this server
+		repair.failed = true
+		return
+	}
+	repair.running = true
+	repair.failed = false
+	const ready = await ensureUpdater()
+	// An update runs right now, or has just finished: tried again in a couple of minutes
+	if (ready === 'busy') {
+		repair.running = false
+		setTimeout(repairServer, 2 * 60 * 1000)
+		return
+	}
+	await markRepair()
+	const token = `repair-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+	let status = null
+	if (ready === 'ok') {
+		try {
+			await writeRequest(token)
+			status = await waitForUpdater(token)
+		}
+		catch (e) {
+			status = null
+		}
+	}
+	const outdated = await checkServices({ force: true })
+	repair.running = false
+	repair.failed = outdated
+	repair.done = !outdated
+	repair.message = outdated ? (status?.message || '') : ''
 }
 
 export function dismissUpdate() {

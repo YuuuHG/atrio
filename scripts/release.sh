@@ -31,11 +31,21 @@ out=build/release
 rm -rf "$out"
 pnpm build
 mkdir -p "$out"
-tar -czf "$out/atrio.tar.gz" -C build/sysroot/var/lib/casaos/www .
+# The updater and the public key travel with the web UI too: old updaters only ever install the web
+# UI, and from it the web UI puts this updater in their place (repairServer in atrioRelease.js)
+www=build/sysroot/var/lib/casaos/www
+mkdir -p "$www/server"
+cp scripts/atrio-update scripts/atrio-release-key.gpg "$www/server/"
+tar -czf "$out/atrio.tar.gz" -C "$www" .
 (cd "$out" && sha256sum atrio.tar.gz > atrio.tar.gz.sha256)
 # The services that run on the server, installed by install.sh and by the updater (atrio-setup)
-tar -czf "$out/atrio-server.tar.gz" --owner=0 --group=0 -C scripts \
-	atrio-update atrio-alerts atrio-backup atrio-setup atrio-release-key.gpg
+# with the version inside, which the updater checks against the web UI it installs
+mkdir "$out/server"
+cp scripts/atrio-update scripts/atrio-alerts scripts/atrio-backup scripts/atrio-setup scripts/atrio-release-key.gpg "$out/server/"
+echo "${tag#v}" > "$out/server/VERSION"
+tar -czf "$out/atrio-server.tar.gz" --owner=0 --group=0 -C "$out/server" \
+	atrio-update atrio-alerts atrio-backup atrio-setup atrio-release-key.gpg VERSION
+rm -rf "$out/server"
 for file in atrio.tar.gz atrio-server.tar.gz; do
 	gpg --batch --yes --local-user "Atrio release signing" --detach-sign -o "$out/$file.sig" "$out/$file"
 	gpgv --keyring "$PWD/scripts/atrio-release-key.gpg" "$out/$file.sig" "$out/$file" 2>/dev/null \

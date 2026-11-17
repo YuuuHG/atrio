@@ -5,6 +5,11 @@
 # back (--restore), or by hand: sudo atrio-update [--force]
 set -euo pipefail
 
+# The whole script is one block, so bash reads all of it before running a line: the web UI may write
+# a newer updater over this file (repairServer in atrioRelease.js), and bash reads a plain script as
+# it goes, which would then run pieces of the new text. The block ends with an exit at the bottom.
+{
+
 REPO="peppeaiello/atrio"
 WWW="${ATRIO_WWW:-/var/lib/casaos/www}"
 STATE="${ATRIO_STATE:-/var/lib/casaos/atrio}"
@@ -13,7 +18,9 @@ REQUEST="$STATE/update-request"
 BACKUP="$STATE/casaos-ui-original"
 # The last installed release, used to restore Atrio when GitHub cannot be reached
 LOCAL="$STATE/release"
-DOWNLOAD="${ATRIO_DOWNLOAD:-https://github.com/$REPO/releases/latest/download}"
+# The release is looked up once, then the web UI and the services both come from that tag: a release
+# published in the middle of an update cannot give a web UI and services of different versions
+DOWNLOAD="${ATRIO_DOWNLOAD:-}"
 # Releases are signed on the maintainer's machine, with a key GitHub never sees: a release that
 # someone else uploaded, even with access to the GitHub account, is not installed
 KEYRING="${ATRIO_RELEASE_KEY:-/usr/local/share/atrio/release-key.gpg}"
@@ -30,6 +37,19 @@ say() {
 }
 
 mkdir -p "$STATE"
+
+# Installs made before releases were signed have no release key. The web UI they run brought one,
+# inside the folder that this updater's own checks installed (www/server, see scripts/release.sh),
+# and the web UI put this updater in place to use it (repairServer in src/plugins/atrioRelease.js).
+# It is adopted once, never in place of a key already there: from then on every release must be
+# signed with it, and the services of the release can be installed.
+WWW_KEY="$WWW/server/atrio-release-key.gpg"
+if [ ! -f "$KEYRING" ] && [ -f "$WWW_KEY" ] && [ ! -L "$WWW_KEY" ] && command -v gpgv >/dev/null; then
+	mkdir -p "$(dirname "$KEYRING")"
+	cp "$WWW_KEY" "$KEYRING.tmp"
+	chmod 644 "$KEYRING.tmp"
+	mv "$KEYRING.tmp" "$KEYRING"
+fi
 
 if [ "$MODE" = "--restore" ]; then
 	# A CasaOS update writes its UI file by file: let it finish before looking
@@ -99,7 +119,21 @@ if [ "$MODE" = "--restore" ]; then
 	mv "$BACKUP.tmp" "$BACKUP"
 fi
 
+# The tag that releases/latest points at, or the moving "latest" link when GitHub does not say
+find_release() {
+	[ -n "$DOWNLOAD" ] && return 0
+	local tag
+	tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' --connect-timeout 20 --max-time 60 \
+		"https://github.com/$REPO/releases/latest" 2>/dev/null | sed -n 's|.*/releases/tag/||p')
+	if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+		DOWNLOAD="https://github.com/$REPO/releases/download/$tag"
+	else
+		DOWNLOAD="https://github.com/$REPO/releases/latest/download"
+	fi
+}
+
 download() {
+	find_release
 	local CURL=(curl -fsSL --connect-timeout 20 --max-time 300 --retry 2)
 	# A progress bar for the large file when a person is watching, nothing in the journal otherwise
 	local BIG=("${CURL[@]}")
@@ -138,8 +172,46 @@ update_server() {
 	mkdir "$TMP/server"
 	tar -xzf "$TMP/atrio-server.tar.gz" -C "$TMP/server" --no-same-owner --no-same-permissions || return 1
 	[ -z "$(find "$TMP/server" -mindepth 1 ! -type f)" ] && [ -f "$TMP/server/atrio-setup" ] || return 1
-	bash "$TMP/server/atrio-setup" "$TMP/server" --update || return 1
+	# Signed with the version inside: the services of another release (an old bundle, also signed,
+	# uploaded next to this web UI) are never installed under this release's name
+	[ "$(cat "$TMP/server/VERSION" 2>/dev/null)" = "$1" ] || return 1
+	snapshot_server
+	if ! bash "$TMP/server/atrio-setup" "$TMP/server" --update; then
+		# Half set up: the services of before come back as they were
+		restore_server
+		log_activity atrio-update error "" "services $1"
+		return 1
+	fi
 	echo "$1" > "$SERVER_VERSION"
+}
+
+# What atrio-setup replaces: the scripts, the release key and the systemd units
+ROOT="${ATRIO_ROOT:-}"
+snapshot_server() {
+	rm -rf "$TMP/previous"
+	mkdir -p "$TMP/previous/bin" "$TMP/previous/units" "$TMP/previous/share"
+	cp -a "$ROOT"/usr/local/bin/atrio-* "$TMP/previous/bin/" 2>/dev/null || true
+	cp -a "$ROOT"/etc/systemd/system/atrio-* "$TMP/previous/units/" 2>/dev/null || true
+	cp -a "$ROOT"/usr/local/share/atrio/. "$TMP/previous/share/" 2>/dev/null || true
+}
+
+# Each file next to its place, then moved in: this updater may be the one being put back, and a
+# running bash script must not be written over
+restore_server() {
+	local file dir
+	for dir in bin:usr/local/bin units:etc/systemd/system share:usr/local/share/atrio; do
+		for file in "$TMP/previous/${dir%%:*}"/*; do
+			[ -e "$file" ] || continue
+			mkdir -p "$ROOT/${dir#*:}"
+			cp -a "$file" "$ROOT/${dir#*:}/.$(basename "$file").back"
+			mv "$ROOT/${dir#*:}/.$(basename "$file").back" "$ROOT/${dir#*:}/$(basename "$file")"
+		done
+	done
+	# Units the new setup added, for services that are not back: gone too
+	for file in "$ROOT"/etc/systemd/system/atrio-*; do
+		[ -e "$file" ] && [ ! -e "$TMP/previous/units/$(basename "$file")" ] && rm -f "$file"
+	done
+	systemctl daemon-reload 2>/dev/null || true
 }
 
 use_local_copy() {
@@ -193,11 +265,18 @@ if [ "$latest" = "$(installed_version "$WWW")" ] && [ -z "$MODE" ]; then
 fi
 
 # Never back to an older release: one signed by us but older, put back as the latest on GitHub,
-# would bring back what a newer one fixed
+# would bring back what a newer one fixed. After a CasaOS update the web UI folder is CasaOS's, so the
+# restore compares with the newest release ever installed here instead (the same one is fine).
 installed=$(installed_version "$WWW")
+HIGHEST="$STATE/highest-version"
+newest=$(cat "$HIGHEST" 2>/dev/null || true)
 if [ -z "$MODE" ] && [ -n "$installed" ] && [ -n "$latest" ] &&
 	[ "$(printf '%s\n%s\n' "$latest" "$installed" | sort -V | tail -n 1)" = "$installed" ]; then
 	fail "The release on GitHub ($latest) is older than the installed one ($installed): nothing was changed"
+fi
+if [ "$MODE" = "--restore" ] && [ -n "$newest" ] && [ -n "$latest" ] && [ "$latest" != "$newest" ] &&
+	[ "$(printf '%s\n%s\n' "$latest" "$newest" | sort -V | tail -n 1)" = "$newest" ]; then
+	fail "The release on GitHub ($latest) is older than one installed before ($newest): nothing was changed"
 fi
 
 write_status running "Installing Atrio $latest"
@@ -229,6 +308,9 @@ fi
 rm -rf "$WWW.old"
 
 mkdir -p "$LOCAL"
+if [ -z "$newest" ] || [ "$(printf '%s\n%s\n' "$latest" "$newest" | sort -V | tail -n 1)" = "$latest" ]; then
+	echo "$latest" > "$HIGHEST"
+fi
 rm -f "$LOCAL/atrio.tar.gz.sig"
 cp "$TMP/atrio.tar.gz" "$TMP/atrio.tar.gz.sha256" "$LOCAL/"
 if [ -f "$TMP/atrio.tar.gz.sig" ]; then
@@ -256,3 +338,5 @@ sleep 3
 write_status done "$DONE"
 log_activity atrio-update ok "" "$latest"
 say "$DONE"
+exit 0
+}
