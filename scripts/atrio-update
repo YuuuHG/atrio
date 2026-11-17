@@ -183,6 +183,7 @@ update_server() {
 		return 1
 	fi
 	echo "$1" > "$SERVER_VERSION"
+	log_activity atrio-update ok "" "services $1"
 }
 
 # What atrio-setup replaces: the scripts, the release key and the systemd units
@@ -260,6 +261,8 @@ if [ "$latest" = "$(installed_version "$WWW")" ] && [ -z "$MODE" ]; then
 	if [ "$(cat "$SERVER_VERSION" 2>/dev/null)" != "$latest" ] && [ -f "$KEYRING" ]; then
 		update_server "$latest" || fail "Atrio $latest is installed, but the services on the server could not be updated"
 	fi
+	# Installs from before this was kept: the release here now counts as the newest one installed
+	[ -s "$STATE/highest-version" ] || echo "$latest" > "$STATE/highest-version"
 	write_status done "Atrio $latest is already installed"
 	exit 0
 fi

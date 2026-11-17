@@ -176,6 +176,8 @@ export async function startUpdate() {
 // below brings them up to date; the install command is only shown when that cannot work.
 export const INSTALL_COMMAND = 'curl -fsSL https://raw.githubusercontent.com/peppeaiello/atrio/main/scripts/install.sh | sudo bash'
 export const services = reactive({ outdated: false, checked: false })
+// CasaOS's answer to reading a file that does not exist (with HTTP 500)
+const FILE_MISSING = 60001
 
 /** true when the services on the server are older than this web UI. `force` reads them again. */
 export async function checkServices({ force = false } = {}) {
@@ -187,10 +189,11 @@ export async function checkServices({ force = false } = {}) {
 		services.checked = true
 	}
 	catch (e) {
-		// The server answered: no such file. Without an answer, logged out (401) or a server error,
+		// The server answered: no such file. CasaOS says so with a 500 and its own code 60001, so that
+		// one counts as missing too. Without an answer, logged out (401) or another server error,
 		// asked again on the next page load
 		const status = e.response?.status
-		if (status && status !== 401 && status < 500) {
+		if ((status && status !== 401 && status < 500) || e.response?.data?.success === FILE_MISSING) {
 			services.outdated = true
 			services.checked = true
 		}

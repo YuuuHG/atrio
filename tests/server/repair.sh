@@ -66,6 +66,8 @@ for family in "v0.1.0 nokey" "v0.1.3 nokey" "v0.1.9 nokey" "v0.1.14 nokey" "v0.1
 	check "$1: their version is recorded" is "$(cat "$ATRIO_STATE/server-version" 2>/dev/null)" 9.9.9
 	check "$1: the run is the web UI's" has "$ATRIO_STATE/update-status.json" '"token":"repair-token"'
 	check "$1: the web UI is left as it is" is "$(status)" "Atrio 9.9.9 is already installed"
+	check "$1: the activity log says the services were updated" has "$ATRIO_STATE/activity.log" "atrio-update	ok		services 9.9.9"
+	check "$1: the newest release installed is recorded" is "$(cat "$ATRIO_STATE/highest-version" 2>/dev/null)" 9.9.9
 done
 
 # A key already there is never replaced by the one in www: the release is then refused
