@@ -29,6 +29,7 @@ const ACTIONS = {
 	'export-settings': ['download-outline', 'Settings saved to a file', 'Settings could not be saved: {detail}'],
 	'import-settings': ['upload-outline', 'Settings loaded from a file', 'Settings could not be loaded: {detail}'],
 	'atrio-update': ['update', 'Atrio {detail} installed'],
+	'tailscale': ['vpn', '{detail}', '{detail}'],
 }
 
 export default {
@@ -122,6 +123,17 @@ export default {
 						'aborted': '{kind} self-test of {device} stopped before the end',
 					}[words[1]]
 					return text ? this.$t(text, { kind: this.$t(kind).toLowerCase(), device: words[2] }).replace(/^./, (c) => c.toUpperCase()) : event.detail
+				}
+				case 'tailscale': {
+					// "install", "up", or on an error "down: the reason"
+					const op = words[0].replace(/:$/, '')
+					if (event.result === 'error') {
+						const failed = { install: 'Tailscale was not installed', up: 'Tailscale was not turned on', down: 'Tailscale was not turned off', login: 'The Tailscale sign-in did not start', logout: 'Tailscale did not sign out' }[op]
+						const reason = event.detail.includes(':') ? event.detail.slice(event.detail.indexOf(':') + 1).trim() : ''
+						return failed ? [this.$t(failed), reason && this.$t(reason)].filter(Boolean).join(': ') : event.detail
+					}
+					const done = { install: 'Tailscale was installed', up: 'Tailscale was turned on', down: 'Tailscale was turned off', login: 'A Tailscale sign-in was started', logout: 'Signed out of Tailscale' }[op]
+					return done ? this.$t(done) : event.detail
 				}
 				case 'app-down': {
 					const what = { 'restarting': 'Keeps restarting', 'crashed': 'Stopped on its own', 'unhealthy': 'Not healthy', 'no-answer': 'Not answering' }[words[0]]

@@ -268,6 +268,10 @@ export default {
       this.closeSettings(false)
       this.$EventBus.$emit('atrio:open-activity')
     },
+    openTailscale() {
+      this.closeSettings(false)
+      this.$EventBus.$emit('atrio:open-tailscale')
+    },
 
     /**
      * @description: Show SideBar
@@ -710,6 +714,16 @@ export default {
                   <span class="atrio-setting-value">{{ port }}</span>
                   <button class="atrio-button is-small" type="button" @click="showPortPanel">
                     {{ $t('Change') }}
+                  </button>
+                </div>
+                <div class="atrio-setting-row">
+                  <b-icon icon="vpn" pack="mdi" size="is-20" />
+                  <span class="atrio-setting-label">
+                    {{ $t('Remote access') }}
+                    <small class="atrio-setting-note">{{ $t('Reach this server from anywhere with Tailscale') }}</small>
+                  </span>
+                  <button class="atrio-button is-small" type="button" @click="openTailscale">
+                    {{ $t('Open') }}
                   </button>
                 </div>
               </section>

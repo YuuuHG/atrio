@@ -33,6 +33,36 @@ if m:
     sys.stdout.write(str(state.get('pages', {}).get(m.group(1), '000')))
     sys.exit(0 if state.get('pages', {}).get(m.group(1)) else 7)
 
+# Tailscale's daemon, through its local API: the state the fake tailscale reads
+m = re.match(r'http://local-tailscaled\.sock/localapi/v0/(.+)$', url)
+if m:
+    with open(os.path.join(DIR, 'calls.log'), 'a') as log:
+        log.write('localapi ' + args[args.index('-X') + 1] + ' ' + m.group(1) + ' ' + (args[args.index('--data') + 1] if '--data' in args else '') + '\n')
+    if os.path.exists(os.path.join(DIR, 'ts-api-fails')):
+        sys.exit(22)
+    path = os.path.join(DIR, 'tailscale.json')
+    ts = json.load(open(path)) if os.path.exists(path) else {'backend': 'NeedsLogin', 'auth': ''}
+    call = m.group(1)
+    data = json.loads(args[args.index('--data') + 1]) if '--data' in args else {}
+    if call == 'prefs' and data.get('WantRunning') is True and ts['backend'] == 'Stopped':
+        ts['backend'] = 'Running'
+    elif call == 'prefs' and data.get('WantRunning') is False and ts['backend'] == 'Running':
+        ts['backend'] = 'Stopped'
+    elif call == 'login-interactive' and ts['backend'] == 'NeedsLogin' and not os.path.exists(os.path.join(DIR, 'ts-no-link')):
+        ts['auth'] = 'https://login.tailscale.com/a/fake123'
+    elif call == 'logout':
+        ts = {'backend': 'NeedsLogin', 'auth': ''}
+    json.dump(ts, open(path, 'w'))
+    sys.exit(0)
+
+# Tailscale's installer: a script that installs the fake tailscale, or fails
+if url == 'https://tailscale.com/install.sh':
+    with open(os.path.join(DIR, 'calls.log'), 'a') as log:
+        log.write('curl ' + url + '\n')
+    fails = os.path.exists(os.path.join(DIR, 'ts-install-fails'))
+    open(args[args.index('-o') + 1], 'w').write('echo installing\n' + ('exit 1\n' if fails else 'rm -f "$FAKE_DOCKER/ts-missing"\n'))
+    sys.exit(0)
+
 with open(os.path.join(DIR, 'sent.log'), 'a') as log:
     log.write(' '.join(args) + '\n')
 code = '400' if os.path.exists(os.path.join(DIR, 'push-fails')) else '200'

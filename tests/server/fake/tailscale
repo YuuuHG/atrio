@@ -1,0 +1,39 @@
+#!/usr/bin/env python3
+"""A stand-in for the tailscale command in the tests, with no daemon and no network.
+
+Its state is $FAKE_DOCKER/tailscale.json: {"backend": "NeedsLogin" | "Running" | "Stopped", "auth": url}.
+The file ts-missing means Tailscale is not installed. The fake curl changes the state through the
+daemon's local API (prefs, login-interactive, logout), as Atrio does.
+"""
+import json, os, sys
+
+DIR = os.environ['FAKE_DOCKER']
+args = sys.argv[1:]
+with open(os.path.join(DIR, 'calls.log'), 'a') as log:
+    log.write('tailscale ' + ' '.join(args) + '\n')
+if os.path.exists(os.path.join(DIR, 'ts-missing')):
+    sys.stderr.write('tailscale: command not found\n')
+    sys.exit(127)
+path = os.path.join(DIR, 'tailscale.json')
+state = json.load(open(path)) if os.path.exists(path) else {'backend': 'NeedsLogin', 'auth': ''}
+
+if args[:1] == ['version']:
+    print('1.104.7\n  tailscale commit: fake')
+elif args[:2] == ['status', '--json']:
+    running = state['backend'] == 'Running'
+    print(json.dumps({
+        'Version': '1.104.7',
+        'BackendState': state['backend'],
+        'AuthURL': state.get('auth', ''),
+        'TailscaleIPs': ['100.64.0.10'] if running else None,
+        'Self': {'HostName': 'atrio-demo', 'DNSName': 'atrio-demo.tail0000.ts.net.' if running else '',
+                 'TailscaleIPs': ['100.64.0.10'] if running else None, 'Online': running, 'OS': 'linux'},
+        'MagicDNSSuffix': 'tail0000.ts.net' if running else '',
+        'CurrentTailnet': {'Name': 'alex@example.com', 'MagicDNSSuffix': 'tail0000.ts.net', 'MagicDNSEnabled': True} if running else None,
+        'Peer': {'nodekey:1': {'HostName': 'phone', 'DNSName': 'phone.tail0000.ts.net.', 'OS': 'android', 'Online': True,
+                               'TailscaleIPs': ['100.64.0.11']}} if running else {},
+        'Health': [],
+    }, indent=2))
+else:
+    sys.stderr.write('fake tailscale: unknown call\n')
+    sys.exit(1)

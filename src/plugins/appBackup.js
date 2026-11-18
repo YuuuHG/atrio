@@ -135,6 +135,22 @@ async function removeFile(path) {
 	}
 }
 
+// --- Tailscale ----------------------------------------------------------------------------------
+
+/**
+ * Asks the server for one Tailscale operation (status, install, up, login, down, logout) and resolves with
+ * what it left for the page: { time, installed, version, daemon, status: `tailscale status --json` | null }.
+ */
+export async function tailscale(op = 'status') {
+	await run({ ACTION: 'tailscale', APP: 'atrio', OP: op })
+	return readJson(`${STATE}/tailscale.json`)
+}
+
+/** What the server found last time, without asking again (null before the first time). */
+export function lastTailscale() {
+	return readJson(`${STATE}/tailscale.json`)
+}
+
 /** The encrypted settings file as text, ready to download. */
 export async function exportSettings(password) {
 	const custom = {}

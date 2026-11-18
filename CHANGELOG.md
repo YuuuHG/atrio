@@ -4,6 +4,17 @@ What changes in each Atrio release. The section for a version is also the text o
 
 ## 0.1.25 — unreleased
 
+**New**
+
+- **Remote access with Tailscale**, from Settings → Network → Remote access, or by typing "remote" in the command
+  palette. If Tailscale is not on the server, Atrio installs it with Tailscale's own installer. Signing in gives a
+  link and a QR code, to open on this computer or on the phone, and the page goes on by itself once you are in. Once
+  connected it shows the address that opens Atrio from anywhere, with a QR code for the phone, this server's name and
+  addresses, the other devices of the tailnet and whether they are online, and anything Tailscale warns about. It
+  can be turned off and on, or signed out. Atrio only changes whether Tailscale runs, through its daemon's local API,
+  so routes, exit node and SSH set with the `tailscale` command stay as they are. Installs, sign-ins and changes are
+  listed in Activity.
+
 **Fixed**
 
 - The tabs of an app's panel (Overview, Logs, Terminal, Settings, Backup) shrank to a thin line when a tab was long,

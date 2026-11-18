@@ -36,6 +36,9 @@ KEEP_AUTO=3
 SCHEDULES="$STATE/schedules"
 HEALTH_WAIT="${ATRIO_HEALTH_WAIT:-60}"
 HEALTH_STEADY="${ATRIO_HEALTH_STEADY:-20}"
+# Tailscale: its daemon's local API, and how long a sign-in may take to give its link
+TS_SOCKET="${ATRIO_TS_SOCKET:-/var/run/tailscale/tailscaled.sock}"
+TS_WAIT="${ATRIO_TS_WAIT:-20}"
 
 ACTION="" APP="" ID="" REASON="manual" TOKEN="" DEST="$DEFAULT_DEST" DEST_MOUNT="" NEW_DEST="" FROM=""
 EVERY="" AT="" DAY="" KEEP="" PASSWORD="" REPLACE_KEY=0
@@ -44,6 +47,8 @@ IMAGES_CHOSEN=()
 IMAGE_ASKED=0
 IGNORE=""
 DEVICE="" KIND=""
+# Tailscale: what to do (status, install, up, login, down, logout)
+OP=""
 # "service=image" for an update to the App Store's version, and set while going back after one
 NEW_IMAGES=()
 ROLLBACK=0
@@ -97,6 +102,8 @@ log_result() {
 		ignore-updates) [ "$1" = ok ] && detail="$IGNORE" ;;
 		update-app) [ "$1" = ok ] && detail="$ID" ;;
 		remove-images|export-settings|import-settings) ;;
+		# Looking is not logged, changing is
+		tailscale) [ "$OP" = status ] && return 0; detail="$OP${2:+: $2}" ;;
 		*) return 0 ;;
 	esac
 	log_activity "$ACTION" "$1" "$([ "$APP" = atrio ] || printf '%s' "$APP")" "$detail"
@@ -174,11 +181,12 @@ read_request() {
 			DEVICE) [[ "$value" =~ ^/dev/[A-Za-z0-9/_-]+$ ]] && DEVICE="$value" ;;
 			KIND) [[ "$value" =~ ^(short|long)$ ]] && KIND="$value" ;;
 			SET_IMAGE) [[ "$value" =~ ^[A-Za-z0-9._-]+=[a-z0-9][a-z0-9._/:@-]*$ ]] && NEW_IMAGES+=("$value") ;;
+			OP) [[ "$value" =~ ^(status|install|up|login|down|logout)$ ]] && OP="$value" ;;
 		esac
 	done < "$REQUEST"
 	rm -f "$REQUEST"
 	case "$ACTION" in
-		scan|backup|restore|delete|destination|forget|schedule|export-settings|import-settings|images|remove-images|check-updates|update-app|ignore-updates|network|disk-test) ;;
+		scan|backup|restore|delete|destination|forget|schedule|export-settings|import-settings|images|remove-images|check-updates|update-app|ignore-updates|network|disk-test|tailscale) ;;
 		*) ACTION=""; APP=""; ID=""; fail "Unknown request" ;;
 	esac
 	if ! [[ "$APP" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]]; then
@@ -1547,6 +1555,121 @@ roll_back() {
 	fail "The new version did not start, so the app went back to how it was before the update"
 }
 
+# --- Tailscale --------------------------------------------------------------------------------
+# Reach the server from anywhere, set up from Atrio's settings. Atrio only starts, stops and signs in
+# the Tailscale installed on the server, through the local API of its daemon, so settings made with
+# `tailscale set` or `tailscale up` (routes, exit node, SSH) are kept. The page reads tailscale.json.
+
+ts_installed() {
+	command -v tailscale >/dev/null 2>&1 && tailscale version >/dev/null 2>&1
+}
+
+# ts_api METHOD PATH [JSON]: one call to the daemon
+ts_api() {
+	local args=(-fsS --max-time 15 --unix-socket "$TS_SOCKET" -H "Host: local-tailscaled.sock" -X "$1")
+	[ -n "${3:-}" ] && args+=(-H "Content-Type: application/json" --data "$3")
+	curl "${args[@]}" "http://local-tailscaled.sock/localapi/v0/$2" >/dev/null 2>&1
+}
+
+ts_status() {
+	timeout 15 tailscale status --json 2>/dev/null
+}
+
+# What the page shows: installed, the daemon's state and Tailscale's own status as it gives it
+write_tailscale() {
+	local installed=false version="" daemon="" status="null" out
+	if ts_installed; then
+		installed=true
+		version=$(tailscale version 2>/dev/null | head -n 1)
+		daemon=$(systemctl is-active tailscaled 2>/dev/null)
+		out=$(ts_status)
+		[ "${out:0:1}" = "{" ] && status="$out"
+	fi
+	{
+		printf '{"time":"%s","installed":%s,"version":"%s","daemon":"%s","status":' "$(date -Iseconds)" "$installed" "$(json "$version")" "$(json "$daemon")"
+		printf '%s}\n' "$status"
+	} > "$STATE/tailscale.json.tmp"
+	# It names the devices and the account: for the page only, read by CasaOS as root
+	chmod 600 "$STATE/tailscale.json.tmp"
+	mv "$STATE/tailscale.json.tmp" "$STATE/tailscale.json"
+}
+
+ts_backend() {
+	ts_status | grep -o '"BackendState": *"[A-Za-z]*"' | head -n 1 | sed 's/.*"\([A-Za-z]*\)"$/\1/'
+}
+
+ts_auth_url() {
+	ts_status | grep -o '"AuthURL": *"https://[^"]*"' | head -n 1 | sed 's/.*"\(https:[^"]*\)"$/\1/'
+}
+
+# The daemon is part of Tailscale's package: started if it was stopped or never enabled
+ts_daemon() {
+	systemctl is-active --quiet tailscaled 2>/dev/null && return 0
+	systemctl enable --now tailscaled >/dev/null 2>&1
+	local i
+	for i in 1 2 3 4 5 6 7 8 9 10; do
+		[ -S "$TS_SOCKET" ] && return 0
+		sleep 1
+	done
+	[ -S "$TS_SOCKET" ]
+}
+
+# Tailscale's own installer, from tailscale.com: it adds their package repository for this system
+ts_install() {
+	ts_installed && return 0
+	command -v curl >/dev/null || fail "curl is not available"
+	local script="$STATE/tailscale-install.sh"
+	curl -fsSL --connect-timeout 15 --max-time 60 https://tailscale.com/install.sh -o "$script" 2>/dev/null \
+		|| { rm -f "$script"; fail "Tailscale could not be downloaded: check the server's internet connection"; }
+	timeout 900 sh "$script" >"$STATE/tailscale-install.log" 2>&1
+	local result=$?
+	rm -f "$script"
+	[ $result -eq 0 ] && ts_installed || fail "Tailscale could not be installed: the installer's messages are in /var/lib/casaos/atrio/tailscale-install.log"
+	rm -f "$STATE/tailscale-install.log"
+}
+
+do_tailscale() {
+	[ -n "$OP" ] || fail "Unknown request"
+	write_status running "$OP"
+	if [ "$OP" = install ]; then
+		ts_install
+	elif [ "$OP" != status ]; then
+		ts_installed || fail "Tailscale is not installed"
+		ts_daemon || fail "The Tailscale service did not start"
+	fi
+	local state
+	case "$OP" in
+		install)
+			ts_daemon || fail "The Tailscale service did not start"
+			;;
+		up)
+			ts_api PATCH prefs '{"WantRunningSet":true,"WantRunning":true}' || fail "Tailscale did not start"
+			;;
+		login)
+			# Running again, then a new sign-in: the daemon gives a link to open in a browser
+			ts_api PATCH prefs '{"WantRunningSet":true,"WantRunning":true}' || fail "Tailscale did not start"
+			ts_api POST login-interactive || fail "Tailscale did not start the sign-in"
+			local waited=0
+			while [ "$waited" -lt "$TS_WAIT" ]; do
+				state=$(ts_backend)
+				[ "$state" = Running ] && break
+				[ -n "$(ts_auth_url)" ] && break
+				sleep 1
+				waited=$((waited + 1))
+			done
+			[ "$state" = Running ] || [ -n "$(ts_auth_url)" ] || fail "Tailscale did not give a sign-in link: check the server's internet connection"
+			;;
+		down)
+			ts_api PATCH prefs '{"WantRunningSet":true,"WantRunning":false}' || fail "Tailscale did not stop"
+			;;
+		logout)
+			ts_api POST logout || fail "Tailscale did not sign out"
+			;;
+	esac
+	write_tailscale
+	write_status done "" ""
+}
+
 # --- Main -------------------------------------------------------------------------------------
 
 case "${1:-}" in
@@ -1577,6 +1700,11 @@ esac
 read_request
 read_conf
 rm -rf "$STAGE"
+# Tailscale has nothing to do with Docker
+if [ "$ACTION" = tailscale ]; then
+	do_tailscale
+	exit 0
+fi
 case "$ACTION" in
 	restore|delete)
 		if [ -n "$FROM" ]; then
