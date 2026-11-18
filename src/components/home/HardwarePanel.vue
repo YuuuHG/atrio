@@ -272,7 +272,7 @@ export default {
 			const hours = Number(disk.hours) - Number(disk.testhours)
 			let when = ''
 			if (disk.testhours !== '' && hours >= 0) {
-				when = hours < 24 ? this.$t('today') : this.$t('{n} days ago', { n: Math.floor(hours / 24) })
+				when = hours < 24 ? this.$t('today') : hours < 48 ? this.$t('yesterday') : this.$t('{n} days ago', { n: Math.floor(hours / 24) })
 			}
 			return [`${kind}, ${result}`, when].filter(Boolean).join(' · ')
 		},

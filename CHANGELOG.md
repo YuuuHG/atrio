@@ -2,6 +2,16 @@
 
 What changes in each Atrio release. The section for a version is also the text of its GitHub release.
 
+## 0.1.25 — unreleased
+
+**Fixed**
+
+- The tabs of an app's panel (Overview, Logs, Terminal, Settings, Backup) shrank to a thin line when a tab was long,
+  such as Backup with several saved backups, and could not be clicked.
+- In the network detail an app could show more than 100% of the traffic: traffic between apps on the server never
+  reaches its network card, so when the apps add up to more than the server's total, their sum is now the whole bar.
+- A disk's last self-test said "1 days ago" the day after: it now says "yesterday".
+
 ## 0.1.24 — 2026-11-17
 
 **New**

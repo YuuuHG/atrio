@@ -1005,6 +1005,7 @@
   "failed": "failed",
   "stopped before the end": "stopped before the end",
   "today": "today",
+  "yesterday": "yesterday",
   "{n} days ago": "{n} days ago",
   "Test started: the result shows here when it ends.": "Test started: the result shows here when it ends.",
   "The disk did not start the test": "The disk did not start the test",

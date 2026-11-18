@@ -71,7 +71,10 @@ export default {
 		},
 		// The bar: the four busiest apps, then the rest of the server's traffic
 		segments() {
-			const all = this.amount(this.total)
+			// Traffic between apps on the server never reaches its network card, so the apps can add up to more
+			// than the server's total: then their sum is the whole bar
+			const apps = this.busyApps.reduce((sum, a) => sum + this.amount(a), 0)
+			const all = Math.max(this.amount(this.total), apps)
 			if (!all) return []
 			const top = this.busyApps.slice(0, 4).map((a, index) => ({ label: this.title(a.app), color: COLORS[index], share: this.amount(a) / all }))
 			const used = top.reduce((sum, s) => sum + s.share, 0)

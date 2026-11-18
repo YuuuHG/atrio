@@ -663,7 +663,9 @@ export default {
 	gap: 0.25rem;
 	min-width: 0;
 	padding: 0.25rem;
-	// On a phone five tabs do not fit: they scroll inside the bar instead of widening the panel
+	// On a phone five tabs do not fit: they scroll inside the bar instead of widening the panel. A scrolling
+	// box may shrink to nothing in the panel's column, so it keeps its height
+	flex: none;
 	overflow-x: auto;
 	scrollbar-width: none;
 	border-radius: 0.875rem;

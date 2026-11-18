@@ -1005,6 +1005,7 @@
   "failed": "fallito",
   "stopped before the end": "interrotto prima della fine",
   "today": "oggi",
+  "yesterday": "ieri",
   "{n} days ago": "{n} giorni fa",
   "Test started: the result shows here when it ends.": "Test avviato: il risultato compare qui quando finisce.",
   "The disk did not start the test": "Il disco non ha avviato il test",
