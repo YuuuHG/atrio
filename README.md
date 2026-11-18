@@ -34,16 +34,25 @@ its respective owners.
   without relying on colour.
 - **App Store** with search first, categories and authors as chips, a clear installed state, and install progress
   right in the app grid.
-- **A panel for every app**: open, restart, stop, update; overview, logs, terminal and settings as tabs. Install and
-  settings forms in sections, with errors that say what to type.
+- **A panel for every app**: open, restart, stop, update; overview, logs, terminal, settings and backups as tabs.
+  Install and settings forms in sections, with errors that say what to type.
 - **Backups for each app**: its settings and the folders you choose, to another disk, a USB drive, a network folder
   or a cloud drive connected in Files, by hand or automatically every day or week. Going back takes one click, and
   an update saves a backup first. Backups are encrypted and signed with a key that stays on the server.
+- **Updates without fear**: new versions are found even for apps on `latest`, a backup is saved first, and the app
+  goes back to its old version if it does not start again.
 - **Many apps at once**: select apps and start, stop, restart or update them together.
-- **Hardware details**: machine, BIOS, processor, memory and every sensor the machine reports.
+- **Hardware details**: machine, BIOS, processor, memory and every sensor the machine reports, with the history of
+  processor, memory, network and temperatures over 24 hours or 7 days.
+- **Disk health**: a plain verdict from each disk's SMART data, temperature and wear, short self-tests every week and
+  long ones every month at night, and a warning before a disk fails.
+- **Network detail**: which apps are downloading or uploading right now, and their totals over 24 hours.
+- **App health**: a dot on the tile and an alert when an app stops answering.
 - **Notifications** for installs, updates, a disk almost full or unhealthy, and a hot processor, also as push
-  alerts to your phone through ntfy, Gotify or Apprise, even when Atrio is closed.
-- **A new file manager**: places in a sidebar, list and grid views, previews, upload by drag and drop.
+  alerts to your phone through ntfy, Gotify or Apprise, even when Atrio is closed, with quiet hours and your own
+  limits.
+- **A new file manager**: places in a sidebar, list and grid views, previews, upload by drag and drop, and a text
+  editor that checks YAML and JSON.
 - **One console** for the logs and terminals of the server and every app.
 - **Widgets your way**: show, hide and reorder them, and add any web page of your network.
 - **Command palette** (`Ctrl K`) to reach apps, actions and settings from the keyboard.
@@ -53,6 +62,14 @@ its respective owners.
 <table>
   <tr>
     <td colspan="2"><img alt="The new file manager with places in a sidebar and a list of folders" src="docs/screenshots/files.jpg"></td>
+  </tr>
+  <tr>
+    <td align="center"><img alt="The Backup tab of an app with automatic backups and saved backups" src="docs/screenshots/backup.jpg" height="420"></td>
+    <td align="center"><img alt="Push notification settings with ntfy, the alerts to send and quiet hours" src="docs/screenshots/alerts.jpg" height="420"></td>
+  </tr>
+  <tr>
+    <td align="center"><img alt="History charts, apps and disk health in the hardware panel" src="docs/screenshots/history.jpg" height="420"></td>
+    <td align="center"><img alt="Network detail with the traffic of each app over 24 hours" src="docs/screenshots/network.jpg" height="420"></td>
   </tr>
   <tr>
     <td><img alt="The App Store" src="docs/screenshots/app-store.jpg"></td>
