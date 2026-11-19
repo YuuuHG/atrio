@@ -198,7 +198,7 @@ export default {
 		signOut() {
 			this.$buefy.dialog.confirm({
 				title: this.$t('Sign out of Tailscale?'),
-				message: escapeHtml(this.$t('This server leaves your tailnet: to reach it from outside again you will have to sign in once more. If you are using Atrio through Tailscale now, this page stops answering.')),
+				message: escapeHtml(this.$t('This server leaves your tailnet: to reach it from outside again you will have to sign in once more. Settings made with the tailscale command, such as routes, exit node and SSH, are cleared too. If you are using Atrio through Tailscale now, this page stops answering.')),
 				confirmText: this.$t('Sign out'),
 				cancelText: this.$t('Cancel'),
 				type: 'is-danger',
@@ -274,6 +274,10 @@ export default {
 										<a :href="status.AuthURL" class="atrio-button is-primary" rel="noopener noreferrer" target="_blank">
 											<b-icon icon="open-in-new" custom-size="mdi-18px" pack="mdi" />{{ $t('Open the sign-in page') }}
 										</a>
+										<!-- Links expire, and one asked for long ago stays in Tailscale's status -->
+										<button :disabled="Boolean(busy)" class="atrio-button" type="button" @click="signIn">
+											<span v-if="busy === 'login'" class="atrio-update-spinner" />{{ $t('Get a new link') }}
+										</button>
 									</div>
 									<p class="atrio-tailscale-wait"><span class="atrio-update-spinner" />{{ $t('Waiting for you to sign in') }}</p>
 								</div>
@@ -379,7 +383,7 @@ export default {
 										<span v-if="busy === 'logout'" class="atrio-update-spinner" />{{ $t('Sign out') }}
 									</button>
 								</div>
-								<p class="atrio-tailscale-note">{{ $t('Routes, exit node and SSH set with the tailscale command are kept: Atrio only turns Tailscale on and off.') }}</p>
+								<p class="atrio-tailscale-note">{{ $t('Turning Tailscale off and on keeps the routes, exit node and SSH set with the tailscale command. Signing out clears them.') }}</p>
 							</section>
 						</template>
 					</div>
@@ -512,8 +516,8 @@ export default {
 		background: none;
 		color: var(--atrio-text);
 		font-size: 0.8125rem;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		// Whole, to be read and typed on another device
+		overflow-wrap: anywhere;
 	}
 
 	.atrio-icon-button {
@@ -604,8 +608,12 @@ export default {
 }
 
 @media (max-width: 480px) {
+	// On two lines rather than cut, in longer languages too
 	.atrio-tailscale .atrio-sheet-head h2 {
+		overflow: visible;
 		font-size: 1.25rem;
+		line-height: 1.2;
+		white-space: normal;
 	}
 
 	.atrio-tailscale-pair {

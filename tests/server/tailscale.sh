@@ -41,6 +41,7 @@ ask login
 check "signing in gives a link" is "$STATE_ $(page 'd["status"]["AuthURL"]')" "done https://login.tailscale.com/a/fake123"
 check "after asking the daemon to run" has "$FAKE_DOCKER/calls.log" 'localapi PATCH prefs {"WantRunningSet":true,"WantRunning":true}'
 check "and to start a sign-in" has "$FAKE_DOCKER/calls.log" "localapi POST login-interactive"
+check "its status read from the same daemon" has "$FAKE_DOCKER/calls.log" "tailscale-socket /var/run/tailscale/tailscaled.sock"
 ts_set NeedsLogin
 touch "$FAKE_DOCKER/ts-no-link"
 ask login

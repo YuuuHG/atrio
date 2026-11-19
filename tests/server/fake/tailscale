@@ -9,6 +9,11 @@ import json, os, sys
 
 DIR = os.environ['FAKE_DOCKER']
 args = sys.argv[1:]
+# The socket the service names, as the real command takes it
+if args[:1] and args[0].startswith('--socket='):
+    socket = args.pop(0)
+    with open(os.path.join(DIR, 'calls.log'), 'a') as log:
+        log.write('tailscale-socket ' + socket[len('--socket='):] + '\n')
 with open(os.path.join(DIR, 'calls.log'), 'a') as log:
     log.write('tailscale ' + ' '.join(args) + '\n')
 if os.path.exists(os.path.join(DIR, 'ts-missing')):

@@ -1571,8 +1571,9 @@ ts_api() {
 	curl "${args[@]}" "http://local-tailscaled.sock/localapi/v0/$2" >/dev/null 2>&1
 }
 
+# The same daemon as ts_api, also when ATRIO_TS_SOCKET points to another one
 ts_status() {
-	timeout 15 tailscale status --json 2>/dev/null
+	timeout 15 tailscale --socket="$TS_SOCKET" status --json 2>/dev/null
 }
 
 # What the page shows: installed, the daemon's state and Tailscale's own status as it gives it

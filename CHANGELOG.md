@@ -11,9 +11,9 @@ What changes in each Atrio release. The section for a version is also the text o
   link and a QR code, to open on this computer or on the phone, and the page goes on by itself once you are in. Once
   connected it shows the address that opens Atrio from anywhere, with a QR code for the phone, this server's name and
   addresses, the other devices of the tailnet and whether they are online, and anything Tailscale warns about. It
-  can be turned off and on, or signed out. Atrio only changes whether Tailscale runs, through its daemon's local API,
-  so routes, exit node and SSH set with the `tailscale` command stay as they are. Installs, sign-ins and changes are
-  listed in Activity.
+  can be turned off and on, or signed out. Turning it off and on goes through its daemon's local API, so routes,
+  exit node and SSH set with the `tailscale` command stay as they are; signing out clears them, as Tailscale does.
+  Installs, sign-ins and changes are listed in Activity.
 
 **Fixed**
 
