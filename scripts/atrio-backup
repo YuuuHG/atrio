@@ -46,6 +46,8 @@ IMAGES_CHOSEN=()
 # Set when the request named images: none valid then is an error, never "every unused image"
 IMAGE_ASKED=0
 IGNORE=""
+# Automatic updates: on or off for one app (AUTO), and set while the nightly run updates one
+AUTO="" AUTO_RUN=0
 DEVICE="" KIND=""
 # Tailscale: what to do (status, install, up, login, down, logout)
 OP=""
@@ -100,13 +102,17 @@ log_result() {
 		destination) [ "$1" = ok ] && detail="$CONF_DEST" ;;
 		schedule) [ "$1" = ok ] && detail="$EVERY $AT $DAY" ;;
 		ignore-updates) [ "$1" = ok ] && detail="$IGNORE" ;;
+		auto-updates) [ "$1" = ok ] && detail="$AUTO" ;;
 		update-app) [ "$1" = ok ] && detail="$ID" ;;
 		remove-images|export-settings|import-settings) ;;
 		# Looking is not logged, changing is
 		tailscale) [ "$OP" = status ] && return 0; detail="$OP${2:+: $2}" ;;
 		*) return 0 ;;
 	esac
-	log_activity "$ACTION" "$1" "$([ "$APP" = atrio ] || printf '%s' "$APP")" "$detail"
+	# The nightly run has its own line, so the log tells it from an update made by hand
+	local action="$ACTION"
+	[ "$AUTO_RUN" = 1 ] && action=auto-update
+	log_activity "$action" "$1" "$([ "$APP" = atrio ] || printf '%s' "$APP")" "$detail"
 }
 
 # The web UI follows the operation through this file
@@ -178,6 +184,7 @@ read_request() {
 			REPLACE_KEY) [ "$value" = 1 ] && REPLACE_KEY=1 ;;
 			IMAGE) IMAGE_ASKED=1; [[ "$value" =~ ^sha256:[0-9a-f]{64}$ ]] && IMAGES_CHOSEN+=("$value") ;;
 			IGNORE) [[ "$value" =~ ^[01]$ ]] && IGNORE="$value" ;;
+			AUTO) [[ "$value" =~ ^[01]$ ]] && AUTO="$value" ;;
 			DEVICE) [[ "$value" =~ ^/dev/[A-Za-z0-9/_-]+$ ]] && DEVICE="$value" ;;
 			KIND) [[ "$value" =~ ^(short|long)$ ]] && KIND="$value" ;;
 			SET_IMAGE) [[ "$value" =~ ^[A-Za-z0-9._-]+=[a-z0-9][a-z0-9._/:@-]*$ ]] && NEW_IMAGES+=("$value") ;;
@@ -186,7 +193,7 @@ read_request() {
 	done < "$REQUEST"
 	rm -f "$REQUEST"
 	case "$ACTION" in
-		scan|backup|restore|delete|destination|forget|schedule|export-settings|import-settings|images|remove-images|check-updates|update-app|ignore-updates|network|disk-test|tailscale) ;;
+		scan|backup|restore|delete|destination|forget|schedule|export-settings|import-settings|images|remove-images|check-updates|update-app|ignore-updates|auto-updates|network|disk-test|tailscale) ;;
 		*) ACTION=""; APP=""; ID=""; fail "Unknown request" ;;
 	esac
 	if ! [[ "$APP" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]]; then
@@ -1375,6 +1382,7 @@ check_app() {
 		line=$(docker inspect -f '{{index .Config.Labels "com.docker.compose.service"}}{{"\t"}}{{.Config.Image}}{{"\t"}}{{.Image}}' "$id" 2>/dev/null) || continue
 		IFS=$'\t' read -r service ref image <<< "$line"
 		state=unknown
+		remote=""
 		if [[ "$ref" != *@* ]]; then
 			local_digests=$(docker image inspect -f '{{range .RepoDigests}}{{println .}}{{end}}' "$image" 2>/dev/null | sed -n 's/.*@//p')
 			if [ -n "$local_digests" ] && remote=$(remote_digest "$ref") && [ -n "$remote" ]; then
@@ -1387,7 +1395,7 @@ check_app() {
 		esac
 		[ "$first" = 1 ] || details="$details,"
 		first=0
-		details="$details{\"service\":\"$(json "$service")\",\"image\":\"$(json "$ref")\",\"state\":\"$state\"}"
+		details="$details{\"service\":\"$(json "$service")\",\"image\":\"$(json "$ref")\",\"state\":\"$state\"${remote:+,\"remote\":\"$remote\"}}"
 	done
 	[ -n "$ids" ] || any=unknown
 	printf '%s\t%s\t%s\t[%s]\n' "$app" "$any" "$(date -Iseconds)" "$details"
@@ -1411,6 +1419,14 @@ write_updates() {
 			first=0
 			printf '"%s"' "$app"
 		done < "$UPDATES_IGNORED"
+		printf '],"auto":['
+		first=1
+		[ -f "$AUTO_UPDATES" ] && while IFS= read -r app; do
+			[[ "$app" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]] && [ -d "$APPS/$app" ] || continue
+			[ "$first" = 1 ] || printf ','
+			first=0
+			printf '"%s"' "$app"
+		done < "$AUTO_UPDATES"
 		printf ']}\n'
 	} > "$UPDATES_JSON.tmp"
 	chmod 644 "$UPDATES_JSON.tmp"
@@ -1435,14 +1451,97 @@ check_updates() {
 do_ignore_updates() {
 	[ -f "$APPS/$APP/docker-compose.yml" ] || fail "Unknown app"
 	[ -n "$IGNORE" ] || fail "Unknown request"
-	touch "$UPDATES_IGNORED"
-	{
-		grep -Fxv -- "$APP" "$UPDATES_IGNORED"
-		[ "$IGNORE" = 1 ] && printf '%s\n' "$APP"
-	} > "$UPDATES_IGNORED.tmp"
-	mv "$UPDATES_IGNORED.tmp" "$UPDATES_IGNORED"
+	list_set "$UPDATES_IGNORED" "$APP" "$IGNORE"
+	# An app whose updates are not shown is not updated on its own either
+	[ "$IGNORE" = 1 ] && list_set "$AUTO_UPDATES" "$APP" 0
 	write_updates
 	write_status done "" ""
+}
+
+# list_set FILE APP 0|1: takes the app out of a list of names, or puts it in once
+list_set() {
+	touch "$1"
+	{
+		grep -Fxv -- "$2" "$1"
+		[ "$3" = 1 ] && printf '%s\n' "$2"
+	} > "$1.tmp"
+	mv "$1.tmp" "$1"
+}
+
+# --- Automatic updates ------------------------------------------------------------------------
+# Apps chosen in their menu get each night the newer image of the tag they use, the way an update
+# by hand does it: backup, new image, and back to the backup if the app does not come up. A new
+# version from the App Store (another tag) is never taken on its own: it may need a look first.
+AUTO_UPDATES="$STATE/auto-updates"
+# One line per app: app, time, ok or error, message, and the new images that did not start
+AUTO_RESULTS="$STATE/auto-update-results"
+AUTO_SLOT="$STATE/auto-update-slot"
+AUTO_TIME="${ATRIO_AUTO_UPDATE_TIME:-04:00}"
+# A server that was off at that time updates when it is back, but not later than this
+AUTO_LATE=14400
+ROLLED_BACK="The new version did not start, so the app went back to how it was before the update"
+
+do_auto_updates() {
+	[ -f "$APPS/$APP/docker-compose.yml" ] || fail "Unknown app"
+	[ -n "$AUTO" ] || fail "Unknown request"
+	list_set "$AUTO_UPDATES" "$APP" "$AUTO"
+	[ "$AUTO" = 1 ] && list_set "$UPDATES_IGNORED" "$APP" 0
+	write_updates
+	write_status done "" ""
+}
+
+# The new images an app would get now, as one short mark: the same mark after a failed update means
+# the same images, which are not tried again
+auto_mark() {
+	awk -F'\t' -v app="$1" '$1 == app { print $4 }' "$UPDATES_TSV" 2>/dev/null \
+		| grep -o '"remote":"sha256:[0-9a-f]*"' | sort | sha256sum | cut -c1-16
+}
+
+auto_result_set() {
+	touch "$AUTO_RESULTS"
+	{
+		awk -F'\t' -v app="$1" '$1 != app' "$AUTO_RESULTS"
+		printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$(date -Iseconds)" "$2" "$(printf '%s' "$3" | tr -d '\000-\037')" "$4"
+	} > "$AUTO_RESULTS.tmp"
+	chmod 644 "$AUTO_RESULTS.tmp"
+	mv "$AUTO_RESULTS.tmp" "$AUTO_RESULTS"
+}
+
+# Run with the automatic backups: once a night, after the planned time, every chosen app that has a
+# newer image is updated, one after the other
+run_auto_updates() {
+	local slot last apps=() app state mark result code message skip
+	command -v docker >/dev/null && command -v curl >/dev/null || return 0
+	slot=$(last_slot daily "$AUTO_TIME" 1) || return 0
+	last=$(head -n 1 "$AUTO_SLOT" 2>/dev/null)
+	printf '%s\n' "$slot" > "$AUTO_SLOT"
+	# The first run only marks the time: turning it on in the afternoon waits for the night
+	[[ "$last" =~ ^[0-9]+$ ]] && [ "$slot" -gt "$last" ] || return 0
+	[ $(( $(date +%s) - slot )) -le "$AUTO_LATE" ] || return 0
+	[ -s "$AUTO_UPDATES" ] || return 0
+	mapfile -t apps < "$AUTO_UPDATES"
+	for app in ${apps[@]+"${apps[@]}"}; do
+		[[ "$app" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]] && [ -f "$APPS/$app/docker-compose.yml" ] || continue
+		grep -Fxq -- "$app" "$UPDATES_IGNORED" 2>/dev/null && continue
+		check_updates "$app"
+		state=$(awk -F'\t' -v app="$app" '$1 == app { print $2 }' "$UPDATES_TSV")
+		[ "$state" = update ] || continue
+		mark=$(auto_mark "$app")
+		[ "$(awk -F'\t' -v app="$app" '$1 == app { print $5 }' "$AUTO_RESULTS" 2>/dev/null)" = "$mark" ] && continue
+		result=$(mktemp)
+		ATRIO_BACKUP_LOCKED=1 ATRIO_BACKUP_RESULT="$result" "$0" --auto-update-app "$app" </dev/null
+		code=$?
+		if [ "$code" -eq 0 ]; then
+			auto_result_set "$app" ok "" ""
+		else
+			message=$(head -n 1 "$result" 2>/dev/null)
+			[ -n "$message" ] || message="The update stopped unexpectedly"
+			skip=""
+			[ "$message" = "$ROLLED_BACK" ] && skip="$mark"
+			auto_result_set "$app" error "$message" "$skip"
+		fi
+		rm -f "$result"
+	done
 }
 
 # The repository of an image reference, without its registry's default names, tag and digest
@@ -1552,7 +1651,7 @@ roll_back() {
 	done
 	do_restore
 	check_updates "$APP" >/dev/null
-	fail "The new version did not start, so the app went back to how it was before the update"
+	fail "$ROLLED_BACK"
 }
 
 # --- Tailscale --------------------------------------------------------------------------------
@@ -1676,6 +1775,7 @@ do_tailscale() {
 case "${1:-}" in
 	--scheduled)
 		run_schedules
+		run_auto_updates
 		exit 0
 		;;
 	--check-updates)
@@ -1694,6 +1794,19 @@ case "${1:-}" in
 		docker compose version >/dev/null 2>&1 || fail "Docker Compose is not available"
 		write_status running preparing
 		do_backup
+		exit 0
+		;;
+	--auto-update-app)
+		APP="${2:-}"
+		[[ "$APP" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]] || exit 1
+		ACTION=update-app
+		AUTO_RUN=1
+		read_conf
+		rm -rf "$STAGE"
+		command -v docker >/dev/null || fail "Docker is not available"
+		docker compose version >/dev/null 2>&1 || fail "Docker Compose is not available"
+		write_status running preparing
+		do_update_app
 		exit 0
 		;;
 esac
@@ -1749,6 +1862,7 @@ case "$ACTION" in
 		do_update_app
 		;;
 	ignore-updates) do_ignore_updates ;;
+	auto-updates) do_auto_updates ;;
 	network)
 		# Measured by atrio-alerts, which reads the same counters for the history
 		write_status running measuring

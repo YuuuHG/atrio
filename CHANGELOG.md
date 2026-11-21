@@ -2,6 +2,18 @@
 
 What changes in each Atrio release. The section for a version is also the text of its GitHub release.
 
+## Unreleased
+
+**New**
+
+- **Automatic updates per app**, from the app's menu: **Update automatically**. Each night at 4:00 the server checks
+  the chosen apps and updates those with a newer image of the version they use (an app on `latest`, or on a tag like
+  `3`), the same way an update by hand does it: a backup first, the new image, and back to that backup if the app
+  does not come up. A new version from the App Store, with another tag, is never taken on its own, because it may
+  need a look first. A server that was off at 4:00 catches up when it is back, until 8:00. A new image that did not
+  start is not tried again; a newer one is. Each automatic update is in Activity, and one that fails sends a push
+  alert. Ignoring an app's updates turns its automatic updates off.
+
 ## 0.1.25 — 2026-11-19
 
 **New**

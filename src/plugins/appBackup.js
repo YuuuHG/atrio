@@ -309,6 +309,13 @@ export async function loadIgnoredUpdates() {
 
 export const setIgnoreUpdates = (name, ignore) => run({ ACTION: 'ignore-updates', APP: name, IGNORE: ignore ? 1 : 0 })
 
+/** The apps the server updates on its own each night, to the newer image of the tag they use. */
+export async function loadAutoUpdates() {
+	return (await readJson(`${STATE}/updates.json`))?.auto || []
+}
+
+export const setAutoUpdates = (name, auto) => run({ ACTION: 'auto-updates', APP: name, AUTO: auto ? 1 : 0 })
+
 /** Asks the registries again for one app; resolves with its state, or '' when the service cannot. */
 async function checkDigest(name) {
 	try {

@@ -24,6 +24,10 @@ printf '%s\tupdate-app\tok\tweb\tX\n' "$(date -Iseconds)" >> "$log"
 docker_state "state['containers'][0]['image'] = 'sha256:dddd'"
 alerts
 check "an update made by atrio-backup is not logged again" is "$(grep -c "app-updated	ok	web" "$log")" 1
+printf '%s\tauto-update\tok\tweb\tX\n' "$(date -Iseconds)" >> "$log"
+docker_state "state['containers'][0]['image'] = 'sha256:eeee'"
+alerts
+check "nor an automatic one" is "$(grep -c "app-updated	ok	web" "$log")" 1
 
 printf 'ENABLED=1\nSERVICE=ntfy\nURL=https://ntfy.example\nTOPIC=test-topic\nDISK=0\nHEALTH=0\nTEMP=0\nAPPS=0\nAPP_UPDATES=0\nUPDATES=0\nLANGUAGE=it\n' > "$ATRIO_STATE/alerts.conf"
 mkdir -p "$ATRIO_STATE/schedules"
@@ -33,6 +37,11 @@ check "a failed automatic backup sends an alert" has "$FAKE_DOCKER/sent.log" "Il
 check "to the topic set" has "$FAKE_DOCKER/sent.log" "https://ntfy.example/test-topic"
 alerts
 check "only once" is "$(grep -c "non è riuscito" "$FAKE_DOCKER/sent.log")" 1
+printf 'web\t2026-11-10T04:00:00+01:00\terror\tThe new version did not start\tabc\n' > "$ATRIO_STATE/auto-update-results"
+alerts
+check "a failed automatic update sends an alert" has "$FAKE_DOCKER/sent.log" "web non è stata aggiornata in automatico: The new version did not start"
+alerts
+check "only once too" is "$(grep -c "aggiornata in automatico" "$FAKE_DOCKER/sent.log")" 1
 check "the alerts settings are root-only" is "$(stat -c %a "$ATRIO_STATE/alerts.conf")" 600
 
 touch "$ATRIO_STATE/alerts-test" "$FAKE_DOCKER/push-fails"

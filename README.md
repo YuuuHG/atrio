@@ -40,7 +40,7 @@ its respective owners.
   or a cloud drive connected in Files, by hand or automatically every day or week. Going back takes one click, and
   an update saves a backup first. Backups are encrypted and signed with a key that stays on the server.
 - **Updates without fear**: new versions are found even for apps on `latest`, a backup is saved first, and the app
-  goes back to its old version if it does not start again.
+  goes back to its old version if it does not start again. Apps you choose can update on their own at night.
 - **Many apps at once**: select apps and start, stop, restart or update them together.
 - **Hardware details**: machine, BIOS, processor, memory and every sensor the machine reports, with the history of
   processor, memory, network and temperatures over 24 hours or 7 days.
@@ -109,7 +109,7 @@ Then reload CasaOS in your browser with `Ctrl+F5`. The script:
 - installs the push alert service (`/usr/local/bin/atrio-alerts`, run every 5 minutes by `atrio-alerts.timer`),
   which stays off until you set it up in Settings → Push notifications;
 - installs the backup service (`/usr/local/bin/atrio-backup`, with `atrio-backup.path`, `atrio-backup-schedule.timer`
-  for automatic backups and `atrio-check-updates.timer`, which looks for new versions of the apps every 6 hours).
+  for automatic backups and app updates, and `atrio-check-updates.timer`, which looks for new versions of the apps every 6 hours).
 
 Nothing else changes: CasaOS, your apps and their data are left as they are.
 

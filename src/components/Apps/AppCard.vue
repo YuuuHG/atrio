@@ -9,7 +9,7 @@ import business_OpenThirdApp from '@/mixins/app/Business_OpenThirdApp'
 import business_LinkApp from '@/mixins/app/Business_LinkApp'
 import tipEditorModal from '@/components/Apps/TipEditorModal.vue'
 import commonI18n, { ice_i18n } from '@/mixins/base/common-i18n'
-import { backupRun, escapeHtml, setIgnoreUpdates, updateApp } from '@/plugins/appBackup'
+import { backupRun, escapeHtml, setAutoUpdates, setIgnoreUpdates, updateApp } from '@/plugins/appBackup'
 
 // The update ring, the same size as the install one
 const PULL_RADIUS = 30
@@ -53,6 +53,11 @@ export default {
     },
     // Atrio: the badge is off for this app, which can still be updated by hand
     updatesIgnored: {
+      type: Boolean,
+      default: false,
+    },
+    // Atrio: the server updates this app on its own each night, to the newer image of its tag
+    autoUpdates: {
       type: Boolean,
       default: false,
     },
@@ -688,6 +693,28 @@ export default {
         })
       }
     },
+    async toggleAutoUpdates() {
+      this.$refs.dro.isActive = false
+      try {
+        await setAutoUpdates(this.item.name, !this.autoUpdates)
+        this.$buefy.toast.open({
+          message: this.autoUpdates
+            ? this.$t('{title} is no longer updated automatically', { title: escapeHtml(this.title) })
+            : this.$t('{title} will update on its own at night, after a backup, when a newer image of the version it uses comes out. A new version in the App Store still waits for you.', { title: escapeHtml(this.title) }),
+          type: 'is-success',
+          duration: this.autoUpdates ? 4000 : 10000,
+        })
+        this.$EventBus.$emit('atrio:refresh-apps')
+      }
+      catch (e) {
+        this.$buefy.toast.open({
+          message: e.message === 'Unknown request'
+            ? this.$t('This needs the latest version of the service on the server. Run the install command once more.')
+            : escapeHtml(this.$t(e.message)),
+          type: 'is-danger',
+        })
+      }
+    },
     async checkAppVersion(name) {
       // A second click while the first update runs
       if (this.isCheckThenUpdate || this.serverUpdate) return
@@ -938,6 +965,9 @@ export default {
           </b-button>
           <b-button v-if="isV2App && !item.is_uncontrolled" expanded type="is-text" @click="toggleIgnoreUpdates">
             {{ updatesIgnored ? $t('Show updates again') : $t('Ignore updates') }}
+          </b-button>
+          <b-button v-if="isV2App && !item.is_uncontrolled" expanded type="is-text" @click="toggleAutoUpdates">
+            {{ autoUpdates ? $t('Stop automatic updates') : $t('Update automatically') }}
           </b-button>
           <b-button v-if="isV2App || isLinkApp" expanded type="is-text" @click="configApp()">
             {{ $t('Setting') }}

@@ -25,6 +25,8 @@ const ACTIONS = {
 	'destination': ['folder-outline', 'New backup folder: {detail}', 'The backup folder was not changed: {detail}'],
 	'schedule': ['calendar-clock', 'Automatic backups of {app}: {detail}', 'Automatic backups of {app} were not changed: {detail}'],
 	'ignore-updates': ['bell-off-outline', '{detail}'],
+	'auto-updates': ['update', '{detail}'],
+	'auto-update': ['arrow-up-circle-outline', '{app} was updated automatically to a newer image of the same version, after a backup', '{app} was not updated automatically: {detail}'],
 	'remove-images': ['layers-remove', '{detail}', 'Unused images were not all removed: {detail}'],
 	'export-settings': ['download-outline', 'Settings saved to a file', 'Settings could not be saved: {detail}'],
 	'import-settings': ['upload-outline', 'Settings loaded from a file', 'Settings could not be loaded: {detail}'],
@@ -105,6 +107,9 @@ export default {
 				case 'ignore-updates': return event.result === 'error' ? this.$t(event.detail) : words[0] === '1'
 					? this.$t('Updates of {app} are no longer shown', { app: this.title(event) })
 					: this.$t('Updates of {app} are shown again', { app: this.title(event) })
+				case 'auto-updates': return event.result === 'error' ? this.$t(event.detail) : words[0] === '1'
+					? this.$t('{app} is now updated automatically', { app: this.title(event) })
+					: this.$t('{app} is no longer updated automatically', { app: this.title(event) })
 				case 'remove-images': {
 					const [count, freed] = words.map(Number)
 					return event.result === 'ok' ? this.$t('{count} unused images removed', { count: count || 0 }) + (freed > 0 ? ` (${this.size(freed)})` : '') : this.$t(event.detail)

@@ -161,10 +161,11 @@ PathExists=/var/lib/casaos/atrio/backup-request
 WantedBy=multi-user.target
 UNIT
 
-# Automatic backups: every 15 minutes, the apps whose planned time has come get their backup
+# Automatic backups and updates: every 15 minutes, the apps whose planned time has come get their backup,
+# and once a night the apps chosen for it get their newer images
 cat > "$ROOT"/etc/systemd/system/atrio-backup-schedule.service <<'UNIT'
 [Unit]
-Description=Make Atrio's automatic app backups
+Description=Make Atrio's automatic app backups and updates
 After=docker.service
 
 [Service]
@@ -175,7 +176,7 @@ UNIT
 
 cat > "$ROOT"/etc/systemd/system/atrio-backup-schedule.timer <<'UNIT'
 [Unit]
-Description=Check for Atrio's automatic app backups every 15 minutes
+Description=Check for Atrio's automatic app backups and updates every 15 minutes
 
 [Timer]
 OnBootSec=5min

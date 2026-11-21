@@ -86,7 +86,7 @@
 				>
 					<app-card
 						:item="item"
-						:update-available="Boolean(updates[item.name])" :updates-ignored="ignoredUpdates.includes(item.name)" :health="health[item.name]?.state || ''"
+						:update-available="Boolean(updates[item.name])" :updates-ignored="ignoredUpdates.includes(item.name)" :auto-updates="autoUpdates.includes(item.name)" :health="health[item.name]?.state || ''"
 						:pull-progress="pulling[item.name] ?? null"
 						@configApp="showConfigPanel"
 						@importApp="showContainerPanel"
@@ -203,7 +203,7 @@ import isEqual from 'lodash/isEqual'
 import { ice_i18n } from '@/mixins/base/common-i18n'
 import YAML from 'yamljs'
 import { findDowngrade } from '@/plugins/appVersions'
-import { escapeHtml, loadDigestUpdates, loadHealth, loadIgnoredUpdates, updateApp } from '@/plugins/appBackup'
+import { escapeHtml, loadAutoUpdates, loadDigestUpdates, loadHealth, loadIgnoredUpdates, updateApp } from '@/plugins/appBackup'
 
 const SYNCTHING_STORE_ID = 74
 
@@ -266,6 +266,7 @@ export default {
 			// Atrio: app name -> a newer image is available
 			updates: {},
 			ignoredUpdates: [],
+			autoUpdates: [],
 			// Atrio: how each app is doing, from the server (atrio-alerts)
 			health: {},
 			user_id: localStorage.getItem('user_id'),
@@ -555,6 +556,7 @@ export default {
 				// Apps whose updates were set to be ignored show no badge
 				const ignored = await loadIgnoredUpdates()
 				this.ignoredUpdates = ignored
+				this.autoUpdates = await loadAutoUpdates()
 				this.updates = Object.fromEntries(await Promise.all(apps.map(async ([name, app]) => [
 					name,
 					!ignored.includes(name) && ((Boolean(app.update_available) && !(await findDowngrade(this.$openAPI, name, app.compose)))

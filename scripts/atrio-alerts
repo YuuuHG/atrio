@@ -87,7 +87,7 @@ recently_updated_here() {
 	local since
 	since=$(date -d '-30 min' +%s)
 	tail -n 200 "$STATE/activity.log" 2>/dev/null | awk -F'\t' -v app="$1" -v since="$since" '
-		$2 == "update-app" && $3 == "ok" && $4 == app { cmd = "date -d \"" $1 "\" +%s"; cmd | getline t; close(cmd); if (t >= since) found = 1 }
+		($2 == "update-app" || $2 == "auto-update") && $3 == "ok" && $4 == app { cmd = "date -d \"" $1 "\" +%s"; cmd | getline t; close(cmd); if (t >= since) found = 1 }
 		END { exit !found }'
 }
 
@@ -131,6 +131,8 @@ text() {
 			up_body) echo "$1 funziona di nuovo." ;;
 			backup_title) echo "Backup automatico non riuscito" ;;
 			backup_body) echo "Il backup automatico di $1 non è riuscito: $2" ;;
+			auto_update_title) echo "Aggiornamento automatico non riuscito" ;;
+			auto_update_body) echo "$1 non è stata aggiornata in automatico: $2" ;;
 			update_title) echo "Nuova versione di Atrio" ;;
 			update_body) echo "È disponibile Atrio $1. Apri le impostazioni di Atrio per aggiornare." ;;
 		esac
@@ -163,6 +165,8 @@ text() {
 			up_body) echo "$1 is working again." ;;
 			backup_title) echo "Automatic backup failed" ;;
 			backup_body) echo "The automatic backup of $1 failed: $2" ;;
+			auto_update_title) echo "Automatic update failed" ;;
+			auto_update_body) echo "$1 was not updated automatically: $2" ;;
 			update_title) echo "New Atrio version" ;;
 			update_body) echo "Atrio $1 is available. Open Atrio's settings to update." ;;
 		esac
@@ -1046,6 +1050,18 @@ check_backups() {
 	done
 }
 
+# Automatic updates that failed, each one once (atrio-backup writes the results)
+check_auto_updates() {
+	local name time result message
+	[ -f "$STATE/auto-update-results" ] || return 0
+	while IFS=$'\t' read -r name time result message _; do
+		[[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] && [ "$result" = error ] && [ -n "$time" ] || continue
+		[ "$(memory_get "auto_update_$name")" = "$time" ] && continue
+		send "$(text auto_update_title)" "$(text auto_update_body "$(app_title "$name")" "$(printf '%s' "$message" | head -c 200)")" 4 "warning" \
+			&& memory_set "auto_update_$name" "$time"
+	done < "$STATE/auto-update-results"
+}
+
 check_updates() {
 	# GitHub is asked every 6 hours at most
 	local last now latest installed
@@ -1151,6 +1167,7 @@ if [ "$APP_UPDATES" = 1 ]; then check_app_updates; else SEND_APPS=0 check_app_up
 [ "$UPDATES" = 1 ] && check_updates
 if [ "$APP_DOWN" = 1 ]; then check_app_health; else SEND_DOWN=0 check_app_health; fi
 check_backups
+check_auto_updates
 flush_queue
 
 if [ -n "$LAST_ERROR" ]; then
