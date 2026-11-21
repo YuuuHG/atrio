@@ -31,6 +31,17 @@ request ACTION=schedule APP=web EVERY=weekly TIME=04:30 DAY=3 KEEP=5
 check "a weekly schedule is saved" has "$ATRIO_STATE/schedules/web" "DAY=3"
 slot=$(sed -n 's/^SLOT=//p' "$ATRIO_STATE/schedules/web")
 check "its first time is a Wednesday at 04:30" is "$(date -d "@$slot" '+%u %H:%M')" "3 04:30"
+# Summer time starts today at 02:00 (a zone made up for the test): 02:30 does not exist today, and
+# the backup at that time runs once the clock has jumped, instead of the schedule being refused
+today=$(( 10#$(TZ=XST-1 date +%j) - 1 ))
+gap="XST-1XDT,$today/2,$(( (today + 100) % 365 ))/3"
+TZ="$gap" request ACTION=schedule APP=web EVERY=daily TIME=02:30 KEEP=2
+check "a time the clock skips today is taken" is "$STATE_" done
+slot=$(sed -n 's/^SLOT=//p' "$ATRIO_STATE/schedules/web")
+if [ "$(TZ="$gap" date +%H%M)" -ge 0330 ]; then expected="$(TZ="$gap" date '+%F') 03:30"; else expected="$(TZ="$gap" date -d yesterday '+%F') 02:30"; fi
+check "and its time today is just after the jump" is "$(TZ="$gap" date -d "@$slot" '+%F %H:%M')" "$expected"
+TZ="$gap" request ACTION=schedule APP=web EVERY=weekly TIME=02:30 DAY="$(TZ="$gap" date -d tomorrow +%u)" KEEP=2
+check "a weekly time past such a day is taken too" is "$STATE_" done
 for bad in "EVERY=hourly TIME=03:00 KEEP=2" "EVERY=daily TIME=25:00 KEEP=2" "EVERY=daily TIME=03:00 KEEP=99" "EVERY=weekly TIME=03:00 DAY=9 KEEP=2"; do
 	# shellcheck disable=SC2086
 	request ACTION=schedule APP=web $bad

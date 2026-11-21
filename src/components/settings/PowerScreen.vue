@@ -13,6 +13,9 @@ const FIRST_POLL_MS = 5000
 const ANSWER_MS = 4000
 // After this long, say that it takes longer than usual
 const SLOW_MS = 5 * 60 * 1000
+// The web server stops among the first services on a shutdown: Docker can take up to 90 seconds more to
+// stop the apps, then the disks are written and unmounted. Off only once it has been silent that long.
+const OFF_AFTER_MS = 90 * 1000
 
 export default {
 	name: 'PowerScreen',
@@ -23,14 +26,14 @@ export default {
 	},
 	emits: ['close'],
 	data() {
-		return { down: false, back: false, slow: false, started: Date.now(), now: Date.now() }
+		return { down: false, downAt: 0, back: false, slow: false, started: Date.now(), now: Date.now() }
 	},
 	computed: {
 		restart() {
 			return this.kind === 'restart'
 		},
 		off() {
-			return !this.restart && this.down
+			return !this.restart && this.down && this.now - this.downAt >= OFF_AFTER_MS
 		},
 		steps() {
 			return this.restart
@@ -40,8 +43,8 @@ export default {
 					{ label: 'Atrio comes back', state: this.back ? 'is-active' : '' },
 				]
 				: [
-					{ label: 'Apps and services stop', state: this.down ? 'is-done' : 'is-active' },
-					{ label: 'The server is off', state: this.down ? 'is-done' : '' },
+					{ label: 'Apps and services stop', state: this.off ? 'is-done' : 'is-active' },
+					{ label: 'The server is off', state: this.off ? 'is-done' : '' },
 				]
 		},
 		elapsed() {
@@ -88,18 +91,24 @@ export default {
 		},
 		async poll() {
 			const up = await this.answers()
-			if (!up) this.down = true
+			if (!up && !this.down) {
+				this.down = true
+				this.downAt = Date.now()
+			}
 			// Back after going down: the new page needs the server's fresh state
 			if (up && this.down && this.restart) {
 				this.back = true
 				setTimeout(() => location.reload(), 1500)
 				return
 			}
+			// Shutting down and answering again: it was only slow to answer, the server is not off yet
+			if (up && !this.restart) this.down = false
 			if (this.off) {
 				clearInterval(this.clock)
 				return
 			}
-			this.slow = Date.now() - this.started > SLOW_MS
+			// "Still answers" only while it does
+			this.slow = Date.now() - this.started > SLOW_MS && (this.restart || !this.down)
 			this.timer = setTimeout(this.poll, POLL_MS)
 		},
 	},

@@ -14,6 +14,17 @@ What changes in each Atrio release. The section for a version is also the text o
   start is not tried again; a newer one is. Each automatic update is in Activity, and one that fails sends a push
   alert. Ignoring an app's updates turns its automatic updates off.
 
+**Fixed**
+
+- Shutting down said the server was off as soon as Atrio stopped answering, while Docker could still be stopping
+  the apps. It now waits until the server has been silent for 90 seconds before saying the power can be cut.
+- In the Tailscale panel, a click during a status check could fail with "Another backup is in progress".
+- Automatic backups set between 2:00 and 2:59 failed on the day summer time starts.
+- A disk whose health got worse during a self-test started from the panel never sent its push alert.
+- Uninstalling kept the backup key but deleted the keys replaced by a settings file, which read the older backups.
+- Activity showed a failed update of the services on the server as installed.
+- Some messages from the server were not translated.
+
 ## 0.1.25 — 2026-11-19
 
 **New**

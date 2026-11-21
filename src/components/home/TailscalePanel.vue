@@ -134,7 +134,8 @@ export default {
 			}
 		},
 		async refresh() {
-			if (this.loading) return
+			// An action under way: it looks again itself when it ends (follow)
+			if (this.loading || this.busy) return
 			this.loading = true
 			try {
 				this.info = await tailscale('status')
@@ -163,6 +164,10 @@ export default {
 		async act(op, done) {
 			if (this.busy) return
 			this.busy = op
+			// The server takes one request at a time: a look at the status still on its way ends first,
+			// or this one would fail with "Another backup is in progress"
+			clearTimeout(this.timer)
+			while (this.loading) await new Promise((resolve) => setTimeout(resolve, 200))
 			try {
 				this.info = await tailscale(op)
 				this.error = ''

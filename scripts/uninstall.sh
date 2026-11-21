@@ -5,11 +5,14 @@
 set -euo pipefail
 
 main() {
-	local WWW="/var/lib/casaos/www"
-	local STATE="/var/lib/casaos/atrio"
+	# Another root folder, for the tests in tests/server only
+	local ROOT="${ATRIO_ROOT:-}"
+	local WWW="$ROOT/var/lib/casaos/www"
+	local STATE="$ROOT/var/lib/casaos/atrio"
 	local BACKUP="$STATE/casaos-ui-original"
+	local UNITS="$ROOT/etc/systemd/system"
 
-	if [ "$(id -u)" -ne 0 ]; then
+	if [ -z "$ROOT" ] && [ "$(id -u)" -ne 0 ]; then
 		echo "Run it as root (with sudo)." >&2
 		exit 1
 	fi
@@ -43,22 +46,23 @@ main() {
 	# New file dates for the gateway, so browsers drop their cached Atrio
 	systemctl try-restart casaos-gateway.service >/dev/null 2>&1 || true
 
-	rm -f /etc/systemd/system/atrio-update.path /etc/systemd/system/atrio-update.service \
-		/etc/systemd/system/atrio-restore.path /etc/systemd/system/atrio-restore.service /usr/local/bin/atrio-update \
-		/etc/systemd/system/atrio-alerts.service /etc/systemd/system/atrio-alerts.timer \
-		/etc/systemd/system/atrio-alerts-test.service /etc/systemd/system/atrio-alerts-test.path /usr/local/bin/atrio-alerts \
-		/etc/systemd/system/atrio-backup.service /etc/systemd/system/atrio-backup.path /usr/local/bin/atrio-backup \
-		/etc/systemd/system/atrio-backup-schedule.service /etc/systemd/system/atrio-backup-schedule.timer \
-		/etc/systemd/system/atrio-check-updates.service /etc/systemd/system/atrio-check-updates.timer
+	rm -f "$UNITS"/atrio-update.path "$UNITS"/atrio-update.service \
+		"$UNITS"/atrio-restore.path "$UNITS"/atrio-restore.service "$ROOT"/usr/local/bin/atrio-update \
+		"$UNITS"/atrio-alerts.service "$UNITS"/atrio-alerts.timer \
+		"$UNITS"/atrio-alerts-test.service "$UNITS"/atrio-alerts-test.path "$ROOT"/usr/local/bin/atrio-alerts \
+		"$UNITS"/atrio-backup.service "$UNITS"/atrio-backup.path "$ROOT"/usr/local/bin/atrio-backup \
+		"$UNITS"/atrio-backup-schedule.service "$UNITS"/atrio-backup-schedule.timer \
+		"$UNITS"/atrio-check-updates.service "$UNITS"/atrio-check-updates.timer
 	systemctl daemon-reload
-	# The backups stay where they are, and only this key can read them: it stays too
+	# The backups stay where they are, and only this key can read them: it stays too, with the keys
+	# a settings file replaced (backup.key.replaced-*), the only ones that read the backups made before
 	if [ -f "$STATE/backup.key" ]; then
-		find "$STATE" -mindepth 1 ! -name backup.key -exec rm -rf {} + 2>/dev/null
+		find "$STATE" -mindepth 1 -maxdepth 1 ! -name 'backup.key' ! -name 'backup.key.replaced-*' -exec rm -rf {} + 2>/dev/null
 		echo "The backup key stays in $STATE/backup.key: Atrio's backups cannot be restored without it."
 	else
 		rm -rf "$STATE"
 	fi
-	rm -rf /usr/local/share/atrio
+	rm -rf "$ROOT"/usr/local/share/atrio
 	echo "CasaOS UI restored. Reload the page in your browser (Ctrl+F5)."
 }
 

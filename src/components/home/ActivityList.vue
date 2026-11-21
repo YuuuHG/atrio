@@ -151,6 +151,13 @@ export default {
 			return this.titles[event.app] || event.app
 		},
 		text(event) {
+			// The updater logs the services on the server as "services <version>", also when they failed
+			if (event.action === 'atrio-update' && event.detail.startsWith('services ')) {
+				const version = event.detail.slice('services '.length)
+				return event.result === 'error'
+					? this.$t('The services on the server were not brought up to date to Atrio {version}', { version })
+					: this.$t('The services on the server were brought up to date to Atrio {version}', { version })
+			}
 			const [, ok, failed] = ACTIONS[event.action]
 			return this.$t(event.result === 'error' && failed ? failed : ok, { app: this.title(event), detail: this.detail(event) })
 		},

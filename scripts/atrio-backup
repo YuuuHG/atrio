@@ -986,10 +986,16 @@ schedule_set() {
 # The time of the last planned backup up to now, in seconds: today or an earlier day at that time
 # (for weekly ones, the last time it was that day of the week). $1 every, $2 HH:MM, $3 day 1-7
 last_slot() {
-	local now days time
+	local now days day time midnight
 	now=$(date +%s)
 	for days in 0 1 2 3 4 5 6 7; do
-		time=$(date -d "$(date -d "-$days days" +%F) $2" +%s 2>/dev/null) || return 1
+		day=$(date -d "-$days days" +%F)
+		# A time the clock skips that day (02:30 when summer time starts) is not a date for `date`:
+		# then it counts from midnight, which lands just after the jump
+		if ! time=$(date -d "$day $2" +%s 2>/dev/null); then
+			[[ "$2" =~ ^([01][0-9]|2[0-3]):([0-5][0-9])$ ]] && midnight=$(date -d "$day" +%s 2>/dev/null) || return 1
+			time=$((midnight + 10#${BASH_REMATCH[1]} * 3600 + 10#${BASH_REMATCH[2]} * 60))
+		fi
 		[ "$time" -le "$now" ] || continue
 		[ "$1" = weekly ] && [ "$(date -d "@$time" +%u)" != "$3" ] && continue
 		printf '%s' "$time"

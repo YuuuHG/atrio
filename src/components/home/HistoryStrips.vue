@@ -173,7 +173,8 @@ function niceCeil(value) {
 			<!-- The same column as the strips: its width is theirs -->
 			<div ref="track" class="atrio-strip-times">
 				<template v-if="hoverX === null">
-					<span v-for="time in timeTicks" :key="time">{{ when(time) }}</span>
+					<!-- By place: with a single point the three times are the same -->
+					<span v-for="(time, index) in timeTicks" :key="index">{{ when(time) }}</span>
 				</template>
 				<span v-else :class="{ 'is-right': hoverX > width / 2 }" :style="{ left: `${hoverX}px` }" class="atrio-strip-when">{{ when(times[hover], true) }}</span>
 			</div>

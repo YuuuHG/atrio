@@ -44,6 +44,19 @@ request ACTION=import-settings APP=atrio "PASSWORD=a pass=word!" REPLACE_KEY=1
 check "with consent the key from the file is used" is "$(cat "$ATRIO_STATE/backup.key")" "$key"
 check "and the old one is kept" test -n "$(ls "$ATRIO_STATE"/backup.key.replaced-* 2>/dev/null)"
 
+# Uninstalling keeps the keys, the one replaced too (it reads the backups made before), and nothing else
+root="$SB/root"
+mkdir -p "$root/var/lib/casaos/www" "$root/etc/systemd/system" "$root/usr/local/bin" "$root/usr/local/share/atrio"
+echo Atrio > "$root/var/lib/casaos/www/index.html"
+cp -a "$ATRIO_STATE" "$root/var/lib/casaos/atrio"
+mkdir -p "$root/var/lib/casaos/atrio/casaos-ui-original"
+echo CasaOS > "$root/var/lib/casaos/atrio/casaos-ui-original/index.html"
+ATRIO_ROOT="$root" bash "$SCRIPTS/uninstall.sh" >/dev/null 2>&1
+check "uninstalling puts the CasaOS UI back" has "$root/var/lib/casaos/www/index.html" CasaOS
+check "and keeps the backup key" is "$(cat "$root/var/lib/casaos/atrio/backup.key")" "$key"
+check "and the key a settings file replaced" test -n "$(ls "$root"/var/lib/casaos/atrio/backup.key.replaced-* 2>/dev/null)"
+check "and nothing else" is "$(ls "$root/var/lib/casaos/atrio" | grep -cv '^backup\.key')" 0
+
 # Files made by hand: a link, a file outside the folder, a newer format, values that are not valid
 make_file() {
 	printf 'evilpass1' > "$SB/pass"

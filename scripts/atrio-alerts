@@ -447,7 +447,7 @@ crc_recent() {
 # One disk: its SMART data and self-tests, the verdict, and its line in disks.tsv. Fails when it sleeps.
 # DISK_VALUES and DISK_ID are left for the self-tests.
 read_disk() {
-	local device="$1" type="$2" out code values verdict reasons serial key before rank_new rank_old line seen result
+	local device="$1" type="$2" out code values verdict reasons serial key before rank_new rank_old line seen result verdict_seen
 	# WAKE=1 when asked from the panel: the test would wake the disk anyway
 	local standby=(-n standby)
 	[ "${WAKE:-0}" = 1 ] && standby=()
@@ -466,8 +466,11 @@ read_disk() {
 	DISK_VALUES="$values"
 	key="disk_verdict_$DISK_ID"
 	before=$(memory_get "$key")
-	memory_set "$key" "$verdict"
-	rank_new=$(case "$verdict" in watch) echo 1 ;; replace) echo 2 ;; *) echo 0 ;; esac)
+	# Read for the panel (--disk-test): a change stays new for the timer's next run, which logs it and
+	# sends its alert. Taken here, it would never be sent (a disk that sleeps may not be read for days).
+	[ "${PANEL_READ:-0}" = 1 ] && [ -n "$before" ] && verdict_seen="$before" || verdict_seen="$verdict"
+	memory_set "$key" "$verdict_seen"
+	rank_new=$(case "$verdict_seen" in watch) echo 1 ;; replace) echo 2 ;; *) echo 0 ;; esac)
 	rank_old=$(case "$before" in watch) echo 1 ;; replace) echo 2 ;; *) echo 0 ;; esac)
 	if [ -n "$before" ] && [ "$rank_new" -gt "$rank_old" ]; then
 		log_activity disk-health error "" "$verdict $device $reasons"
@@ -1106,8 +1109,10 @@ trim_activity
 if [ "$MODE" = "--disk-test" ]; then
 	command -v smartctl >/dev/null || exit 1
 	[[ "$3" =~ ^(short|long)$ ]] || exit 1
-	# Alerts go out from the timer's runs, which know whether they are on and set up
+	# Alerts go out from the timer's runs, which know whether they are on and set up: a new verdict
+	# read here is left for them (read_disk)
 	SEND_HEALTH=0
+	PANEL_READ=1
 	while read -r device _ type _; do
 		[ "$device" = "$2" ] && [[ "$type" =~ ^[A-Za-z0-9,_+-]+$ ]] || continue
 		touch "$DISKS_TSV"

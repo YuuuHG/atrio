@@ -137,4 +137,18 @@ ATRIO_TEST_WAIT=0 request ACTION=disk-test APP=atrio DEVICE='/dev/sda;reboot' KI
 check "a device name is checked" is "$STATE_ $MESSAGE" "error Unknown disk"
 ATRIO_TEST_WAIT=0 request ACTION=disk-test APP=atrio DEVICE=/dev/sda KIND=conveyance
 check "and the kind of test" is "$STATE_ $MESSAGE" "error Unknown disk"
+
+# A disk that got worse while asleep, read first by a test from the panel: the timer's run still
+# sends the alert, and logs it once
+sed -i 's/^ENABLED=0/ENABLED=1/' "$ATRIO_STATE/alerts.conf"
+rm -f "$FAKE_DOCKER/smart-sda"
+alerts 14
+check "the disk was fine before" is "$(disk /dev/sda verdict)" good
+: > "$FAKE_DOCKER/sent.log"
+sed 's/^\(  5 Reallocated_Sector_Ct .* -       \)0$/\18/' "$TESTS/fake/smart/sda" > "$FAKE_DOCKER/smart-sda"
+ATRIO_TEST_WAIT=0 request ACTION=disk-test APP=atrio DEVICE=/dev/sda KIND=short
+check "the panel shows the new verdict" is "$STATE_ $(disk /dev/sda verdict)" "done watch"
+alerts 14
+check "the alert is sent by the next run" has "$FAKE_DOCKER/sent.log" "Disk /dev/sda (WDC WD40EFRX-68N32N0) shows the first signs"
+check "and the change is logged once" is "$(grep -c 'disk-health	error		watch /dev/sda' "$ATRIO_STATE/activity.log")" 1
 finish
