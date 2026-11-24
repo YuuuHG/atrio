@@ -12,6 +12,7 @@ const INSTALL = 'curl -fsSL https://raw.githubusercontent.com/peppeaiello/atrio/
 const STEPS = {
 	scanning: 'Measuring the folders…',
 	preparing: 'Getting ready…',
+	compose: 'Downloading Docker Compose…',
 	checking: 'Checking…',
 	stopping: 'Stopping the app…',
 	archiving: 'Saving the files…',

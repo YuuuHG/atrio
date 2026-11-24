@@ -46,7 +46,8 @@ check "and the old one is kept" test -n "$(ls "$ATRIO_STATE"/backup.key.replaced
 
 # Uninstalling keeps the keys, the one replaced too (it reads the backups made before), and nothing else
 root="$SB/root"
-mkdir -p "$root/var/lib/casaos/www" "$root/etc/systemd/system" "$root/usr/local/bin" "$root/usr/local/share/atrio"
+mkdir -p "$root/var/lib/casaos/www" "$root/etc/systemd/system" "$root/usr/local/bin" "$root/usr/local/share/atrio" "$root/usr/local/lib/atrio"
+echo compose > "$root/usr/local/lib/atrio/docker-compose"
 echo Atrio > "$root/var/lib/casaos/www/index.html"
 cp -a "$ATRIO_STATE" "$root/var/lib/casaos/atrio"
 mkdir -p "$root/var/lib/casaos/atrio/casaos-ui-original"
@@ -56,6 +57,7 @@ check "uninstalling puts the CasaOS UI back" has "$root/var/lib/casaos/www/index
 check "and keeps the backup key" is "$(cat "$root/var/lib/casaos/atrio/backup.key")" "$key"
 check "and the key a settings file replaced" test -n "$(ls "$root"/var/lib/casaos/atrio/backup.key.replaced-* 2>/dev/null)"
 check "and nothing else" is "$(ls "$root/var/lib/casaos/atrio" | grep -cv '^backup\.key')" 0
+check "the Docker Compose it downloaded goes too" test ! -e "$root/usr/local/lib/atrio"
 
 # Files made by hand: a link, a file outside the folder, a newer format, values that are not valid
 make_file() {

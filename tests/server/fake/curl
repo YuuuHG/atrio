@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """A stand-in for curl in the tests: registries and push services, with no network.
 
+Docker Compose's releases on GitHub fail as with no network; a file:// download stops halfway with
+error 23 when $FAKE_DOCKER/disk-full exists.
 Registry manifests (HEAD .../v2/<repo>/manifests/<tag>) answer with the digest in $FAKE_DOCKER/state.json
 under remote["<host>/<repo>:<tag>"], or 404. Anything else (a push alert) is logged to sent.log and
 answered 200, or 400 when the file push-fails exists.
@@ -10,6 +12,17 @@ import json, os, re, shutil, sys
 args = sys.argv[1:]
 DIR = os.environ['FAKE_DOCKER']
 url = next(a for a in reversed(args) if a.startswith(('http://', 'https://', 'file://')))
+# Docker Compose's releases: the tests have no network (a test serves its own from a file:// URL)
+if url.startswith('https://github.com/docker/compose/releases/'):
+    with open(os.path.join(DIR, 'calls.log'), 'a') as log:
+        log.write('curl ' + url + '\n')
+    sys.stderr.write('curl: (6) Could not resolve host: github.com\n')
+    sys.exit(6)
+# A full disk: half the file is written, then curl stops (23, write error)
+if url.startswith('file://') and '-o' in args and os.path.exists(os.path.join(DIR, 'disk-full')):
+    data = open(url[len('file://'):], 'rb').read()
+    open(args[args.index('-o') + 1], 'wb').write(data[:len(data) // 2])
+    sys.exit(23)
 # Local files (a release made by a test) go to the real curl
 if url.startswith('file://'):
     here = os.path.dirname(os.path.abspath(__file__))

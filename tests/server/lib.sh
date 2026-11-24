@@ -22,6 +22,8 @@ sandbox() {
 	export FAKE_DOCKER="$SB/docker"
 	export ATRIO_STATE="$SB/state" ATRIO_APPS="$SB/apps" ATRIO_APPDATA="$SB/data" ATRIO_BACKUP_DEST="$SB/data/.atrio-backups"
 	export ATRIO_CASAOS_ENV="$SB/casaos.env" ATRIO_WWW="$SB/www" ATRIO_HEALTH_WAIT=4 ATRIO_HEALTH_STEADY=2
+	# Where atrio-backup puts the Docker Compose it downloads, never /usr/local/lib here
+	export ATRIO_COMPOSE_DIR="$SB/lib"
 	export PATH="$TESTS/fake:$PATH"
 	mkdir -p "$FAKE_DOCKER" "$ATRIO_STATE" "$ATRIO_APPS" "$ATRIO_APPDATA"
 	: > "$SB/casaos.env"

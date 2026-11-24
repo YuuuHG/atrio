@@ -63,6 +63,8 @@ main() {
 		rm -rf "$STATE"
 	fi
 	rm -rf "$ROOT"/usr/local/share/atrio
+	# The Docker Compose that atrio-backup downloaded on a server without one
+	rm -rf "$ROOT"/usr/local/lib/atrio
 	echo "CasaOS UI restored. Reload the page in your browser (Ctrl+F5)."
 }
 

@@ -23,6 +23,7 @@ const UNWELL = {
 }
 // Atrio: the steps of an update run by the server (atrio-backup update-app): ring position and label
 const SERVER_UPDATE_STEPS = {
+  compose: [3, 'Getting Docker Compose'],
   preparing: [5, 'Saving a backup'],
   stopping: [10, 'Saving a backup'],
   archiving: [20, 'Saving a backup'],

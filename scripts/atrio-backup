@@ -330,24 +330,123 @@ compose_env() {
 # Docker Compose: the plugin ("docker compose"), or else the older standalone docker-compose, which
 # takes the same options for what is done here. CasaOS has compose built in and needs neither, so a
 # server may have none (Docker installed from the distribution's packages): backups, image checks and
-# the rest work without it, and only restoring and updating apps, which recreate the containers, ask
-# for it. systemd starts services without HOME, where docker also looks for its plugins.
+# the rest work without it. Restoring and updating apps recreate the containers and need it: then
+# Atrio uses its own copy of the official standalone binary, downloaded once into COMPOSE_DIR and
+# checked against the SHA-256 written here (this script is signed in each release, so the hashes
+# are as trusted as the release). systemd starts services without HOME, where docker also looks for
+# its plugins.
 export HOME="${HOME:-/root}"
+COMPOSE_VERSION=v5.6.1
+COMPOSE_DIR="${ATRIO_COMPOSE_DIR:-/usr/local/lib/atrio}"
+COMPOSE_BIN="$COMPOSE_DIR/docker-compose"
+COMPOSE_URL="${ATRIO_COMPOSE_URL:-https://github.com/docker/compose/releases/download/$COMPOSE_VERSION}"
 COMPOSE=()
+COMPOSE_TMP=""
+COMPOSE_ERROR=""
 find_compose() {
 	[ "${#COMPOSE[@]}" -gt 0 ] && return 0
 	if docker compose version >/dev/null 2>&1; then
 		COMPOSE=(docker compose)
 	elif command -v docker-compose >/dev/null && docker-compose version >/dev/null 2>&1; then
 		COMPOSE=(docker-compose)
+	elif own_compose_ok && "$COMPOSE_BIN" version >/dev/null 2>&1; then
+		COMPOSE=("$COMPOSE_BIN")
 	else
 		return 1
 	fi
 }
 
+# The release file for this processor and its SHA-256 (from the release's checksums.txt). A 32-bit
+# system on a 64-bit ARM kernel (older Raspberry Pi OS) runs the armv7 one.
+compose_asset() {
+	local arch="${ATRIO_COMPOSE_ARCH:-$(uname -m)}"
+	case "$arch" in
+		aarch64|arm64) [ -z "${ATRIO_COMPOSE_ARCH:-}" ] && [ "$(getconf LONG_BIT 2>/dev/null)" = 32 ] && arch=armv7l ;;
+	esac
+	case "$arch" in
+		x86_64|amd64) echo "docker-compose-linux-x86_64 47737f4236e6d3ccea7291995203f8f018058783b4c3a9469119811a0b5db8c0" ;;
+		aarch64|arm64) echo "docker-compose-linux-aarch64 42cfa75f51ad0ccf290bad37899e0038a8c10a0069e85233ecc1d53e3ff1347d" ;;
+		armv7l|armv7) echo "docker-compose-linux-armv7 e2ed79b41693f5e6473eb9c1005bd4cbb83844d8220ac72fe5c6a6cc5e0bfee8" ;;
+		armv6l|armv6) echo "docker-compose-linux-armv6 bf1573bca672a535409fca7d6a53d836554fd90b76c27e0c3830a8a431517ecd" ;;
+		*) return 1 ;;
+	esac
+}
+
+compose_sum() {
+	local asset sum
+	read -r asset sum < <(compose_asset) || return 1
+	# The tests serve another file
+	printf '%s\n' "${ATRIO_COMPOSE_SHA256:-$sum}"
+}
+
+# Atrio's own copy is there and is the one this script expects: a copy from an older Atrio, or a
+# damaged one, is downloaded again
+own_compose_ok() {
+	local sum
+	[ -f "$COMPOSE_BIN" ] && [ ! -L "$COMPOSE_BIN" ] || return 1
+	sum=$(compose_sum) || return 1
+	[ "$(sha256sum < "$COMPOSE_BIN" | cut -d' ' -f1)" = "$sum" ]
+}
+
+# Downloads the standalone binary into COMPOSE_DIR. It is written under a temporary name next to it,
+# and only once its hash matches is it made executable and put in place: a half-written or different
+# file is never run. One run at a time holds backup.lock, so no other run writes there meanwhile.
+# Sets COMPOSE_ERROR when it fails.
+fetch_compose() {
+	local asset sum code got
+	if ! read -r asset sum < <(compose_asset); then
+		COMPOSE_ERROR="Docker Compose is not installed on the server, and Atrio cannot download it for this processor: install the docker-compose-plugin package"
+		return 1
+	fi
+	sum="${ATRIO_COMPOSE_SHA256:-$sum}"
+	COMPOSE_ERROR="Docker Compose is not installed on the server, and Atrio could not download it: check the server's internet connection, or install the docker-compose-plugin package"
+	command -v curl >/dev/null && command -v sha256sum >/dev/null || return 1
+	mkdir -p "$COMPOSE_DIR" 2>/dev/null && chmod 755 "$COMPOSE_DIR" || return 1
+	# What a run stopped by force left behind
+	rm -f "$COMPOSE_DIR"/.docker-compose.*
+	COMPOSE_TMP=$(mktemp "$COMPOSE_DIR/.docker-compose.XXXXXX" 2>/dev/null) || return 1
+	curl -fsSL --proto '=https,file' --proto-redir '=https' --connect-timeout 15 --speed-limit 1024 --speed-time 60 \
+		--max-time 1800 -o "$COMPOSE_TMP" "$COMPOSE_URL/$asset" 2>/dev/null
+	code=$?
+	if [ "$code" -ne 0 ]; then
+		# 23: the file could not be written, almost always a full disk
+		[ "$code" -eq 23 ] && COMPOSE_ERROR="Docker Compose is not installed on the server, and there is not enough space to download it (about 35 MB in /usr/local): free some space, or install the docker-compose-plugin package"
+		rm -f "$COMPOSE_TMP"
+		COMPOSE_TMP=""
+		return 1
+	fi
+	got=$(sha256sum < "$COMPOSE_TMP" | cut -d' ' -f1)
+	if [ "$got" != "$sum" ]; then
+		COMPOSE_ERROR="The Docker Compose that was downloaded is not the expected one, and was not used: try again later, or install the docker-compose-plugin package"
+		rm -f "$COMPOSE_TMP"
+		COMPOSE_TMP=""
+		return 1
+	fi
+	chmod 755 "$COMPOSE_TMP" && mv -f "$COMPOSE_TMP" "$COMPOSE_BIN" || { rm -f "$COMPOSE_TMP"; COMPOSE_TMP=""; return 1; }
+	COMPOSE_TMP=""
+}
+
 # Before anything is stopped or changed
 need_compose() {
-	find_compose || fail "Docker Compose is not installed on the server, and restoring or updating an app needs it: install the docker-compose-plugin package"
+	find_compose && return 0
+	if ! own_compose_ok; then
+		write_status running compose
+		fetch_compose || fail "$COMPOSE_ERROR"
+	fi
+	find_compose || fail "Docker Compose was downloaded, but it does not run on this server: install the docker-compose-plugin package"
+}
+
+# Ahead of time, with the check for new images: a restore then works also while offline. A failed
+# download is tried again a day later, not every 6 hours.
+prefetch_compose() {
+	find_compose && return 0
+	own_compose_ok && return 0
+	[ -n "$(find "$STATE/compose-download-failed" -mmin -1440 2>/dev/null)" ] && return 0
+	if fetch_compose; then
+		rm -f "$STATE/compose-download-failed"
+	else
+		touch "$STATE/compose-download-failed"
+	fi
 }
 
 compose() {
@@ -386,6 +485,7 @@ on_exit() {
 	local code=$?
 	[ -n "$TMP_ARCHIVE" ] && rm -f "$TMP_ARCHIVE" "$TMP_ARCHIVE.info"
 	[ -n "$UPLOAD_TMP" ] && timeout 60 rm -f "$UPLOAD_TMP"
+	[ -n "$COMPOSE_TMP" ] && rm -f "$COMPOSE_TMP"
 	rm -rf "$STAGE"
 	# A new compose file prepared for an update that stopped before using it
 	[ -n "$APP" ] && [ -d "$APPS/$APP" ] && rm -f "$APPS/$APP/docker-compose.yml.atrio-next"
@@ -1811,6 +1911,7 @@ case "${1:-}" in
 	--check-updates)
 		command -v docker >/dev/null && command -v curl >/dev/null || exit 0
 		check_updates
+		prefetch_compose
 		exit 0
 		;;
 	--scheduled-app)

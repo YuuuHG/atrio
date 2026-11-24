@@ -10,7 +10,11 @@ What changes in each Atrio release. The section for a version is also the text o
   new images stopped at "Docker Compose is not available". CasaOS has compose built in and does not need it, so
   Docker installed from a distribution's packages often comes without it. Only restoring and updating an app, which
   recreate its containers, need it now; they use the older standalone `docker-compose` when that is there, and
-  otherwise stop before changing anything, saying to install the `docker-compose-plugin` package.
+  otherwise Atrio downloads the official Docker Compose binary (v5.6.1, about 33 MB) once into
+  `/usr/local/lib/atrio`, checks it against the SHA-256 written in its own signed script before it is ever run, and
+  uses that. The check for new versions every 6 hours fetches it ahead of time, so a restore works later also
+  offline. When it cannot be downloaded (no internet, a full disk, a processor with no release), nothing is stopped
+  or changed and the message says why. Uninstalling Atrio removes it.
 - **Updating apps installed from outside the App Store** (#12), from linuxserver, ghcr.io and the like: since the
   check for a newer image failed on those servers, Atrio fell back on the CasaOS App Store, which may have an old app
   of the same name or none at all, and said things like "the App Store only offers an older version". Now an app with
