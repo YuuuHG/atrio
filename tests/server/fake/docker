@@ -6,6 +6,8 @@ images (id, size, created, tags, digests). Registry images that `compose pull` c
 registry: { ref: { id, digest } }. Files in that folder change its behaviour:
   pull-fails     compose pull fails
   crash          containers started from an image named in it (one per line) keep restarting
+  no-compose-plugin  "docker compose" is not a docker command (only fake/docker-compose may work)
+  no-standalone      fake/docker-compose is not installed either
 Every call is appended to calls.log.
 """
 import json, os, re, sys
@@ -162,6 +164,9 @@ def main(args):
         log.write(' '.join(args) + '\n')
     state = load()
     out = sys.stdout
+    if args[:1] == ['compose'] and flag('no-compose-plugin') and not os.environ.get('FAKE_STANDALONE'):
+        sys.stderr.write("docker: 'compose' is not a docker command.\n")
+        return 1
     if args[:2] == ['compose', 'version']:
         return 0
     if args[:1] == ['compose']:

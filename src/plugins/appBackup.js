@@ -317,14 +317,27 @@ export async function loadAutoUpdates() {
 export const setAutoUpdates = (name, auto) => run({ ACTION: 'auto-updates', APP: name, AUTO: auto ? 1 : 0 })
 
 /** Asks the registries again for one app; resolves with its state, or '' when the service cannot. */
+// Whether the registry has a newer image of the tag the app uses: { state: 'update' | 'current' |
+// 'unknown' | '' } and, when the check itself failed, its `error`
 async function checkDigest(name) {
 	try {
 		await run({ ACTION: 'check-updates', APP: name })
-		return (await loadDigestUpdates())[name]?.state || ''
+		return { state: (await loadDigestUpdates())[name]?.state || '' }
 	}
 	catch (e) {
-		return ''
+		return { state: '', error: e.message || 'Unknown error' }
 	}
+}
+
+function digestFailed(vm, title, error, quiet) {
+	if (!quiet) {
+		vm.$buefy.toast.open({
+			message: vm.$t('Atrio could not look for a newer image of {title}: {reason}', { title: escapeHtml(title), reason: escapeHtml(vm.$t(error)) }),
+			type: 'is-danger',
+			duration: 12000,
+		})
+	}
+	return 'failed'
 }
 
 const ROLLED_BACK = 'The new version did not start, so the app went back to how it was before the update'
@@ -386,13 +399,23 @@ export async function updateApp(vm, name, title, { quiet = false } = {}) {
 	const older = await findDowngrade(vm.$openAPI, name)
 	if (older) {
 		// The App Store's tag is not taken, but a newer image of the tag the app has now is fine
-		if (await backupsInstalled() && await checkDigest(name) === 'update') {
-			try {
-				return await updateOnServer(vm, name, title, quiet)
+		if (await backupsInstalled()) {
+			const digest = await checkDigest(name)
+			if (digest.state === 'update') {
+				try {
+					return await updateOnServer(vm, name, title, quiet)
+				}
+				catch (e) {
+					return 'failed'
+				}
 			}
-			catch (e) {
-				return 'failed'
+			// Its own tag has nothing newer: the App Store's older version does not matter then
+			if (digest.state === 'current') {
+				if (!quiet) vm.$buefy.toast.open({ message: vm.$t('{title} is up to date', { title: escapeHtml(title) }), type: 'is-info' })
+				return 'current'
 			}
+			// Said as it is, not as an App Store version (an app installed from elsewhere may share its name)
+			if (digest.error) return digestFailed(vm, title, digest.error, quiet)
 		}
 		if (!quiet) {
 			vm.$buefy.toast.open({
@@ -413,8 +436,12 @@ export async function updateApp(vm, name, title, { quiet = false } = {}) {
 		// Asked again by CasaOS itself when updating
 	}
 	// Nothing newer in the App Store: an app on "latest" may still have a newer image of the same tag
+	let digestState = ''
 	if (!hasUpdate && await backupsInstalled()) {
-		const state = await checkDigest(name)
+		const digest = await checkDigest(name)
+		const state = digest.state
+		digestState = state
+		if (digest.error) return digestFailed(vm, title, digest.error, quiet)
 		if (state === 'update') {
 			try {
 				return await updateOnServer(vm, name, title, quiet)
@@ -462,8 +489,17 @@ export async function updateApp(vm, name, title, { quiet = false } = {}) {
 	try {
 		const res = await compose.updateComposeApp(name)
 		if (/up to date/i.test(res.data.message || '')) {
-			// CasaOS does nothing here: the App Store has no newer version yet, even if the app itself announces one
-			if (!quiet) vm.$buefy.toast.open({ message: vm.$t('{title} is already on the version the App Store offers. The app may announce a newer one before the App Store has it.', { title: escapeHtml(title) }), type: 'is-info', duration: 8000 })
+			// CasaOS does nothing here: the App Store has no newer version yet, even if the app itself announces one.
+			// With the registry silent too (an app installed from elsewhere, say), both are said.
+			if (!quiet) {
+				vm.$buefy.toast.open({
+					message: digestState === 'unknown'
+						? vm.$t('No newer version of {title} was found: the App Store has none, and the registry of its image did not answer.', { title: escapeHtml(title) })
+						: vm.$t('{title} is already on the version the App Store offers. The app may announce a newer one before the App Store has it.', { title: escapeHtml(title) }),
+					type: 'is-info',
+					duration: 8000,
+				})
+			}
 			return 'current'
 		}
 		if (!quiet) vm.$buefy.toast.open({ message: res.data.message ? escapeHtml(res.data.message) : vm.$t('No updates are currently available for the application.'), type: 'is-success' })

@@ -2,6 +2,21 @@
 
 What changes in each Atrio release. The section for a version is also the text of its GitHub release.
 
+## 0.1.27 — unreleased
+
+**Fixed**
+
+- **Servers without the Docker Compose plugin** (#11): every app backup, the list of unused images and the check for
+  new images stopped at "Docker Compose is not available". CasaOS has compose built in and does not need it, so
+  Docker installed from a distribution's packages often comes without it. Only restoring and updating an app, which
+  recreate its containers, need it now; they use the older standalone `docker-compose` when that is there, and
+  otherwise stop before changing anything, saying to install the `docker-compose-plugin` package.
+- **Updating apps installed from outside the App Store** (#12), from linuxserver, ghcr.io and the like: since the
+  check for a newer image failed on those servers, Atrio fell back on the CasaOS App Store, which may have an old app
+  of the same name or none at all, and said things like "the App Store only offers an older version". Now an app with
+  no newer image is simply up to date, a failed check says why, and an app the App Store does not know is never
+  described by it.
+
 ## 0.1.26 — 2026-11-21
 
 **New**

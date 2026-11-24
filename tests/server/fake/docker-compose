@@ -1,0 +1,9 @@
+#!/bin/sh
+# The standalone docker-compose, for servers without the plugin: the fake docker's compose, unless the
+# test says it is not installed (no-standalone in $FAKE_DOCKER)
+if [ -e "$FAKE_DOCKER/no-standalone" ]; then
+	echo "docker-compose: command not found" >&2
+	exit 127
+fi
+echo "docker-compose $*" >> "$FAKE_DOCKER/calls.log"
+FAKE_STANDALONE=1 exec "$(dirname "$0")/docker" compose "$@"

@@ -327,10 +327,34 @@ compose_env() {
 	done < "$CASAOS_ENV"
 }
 
+# Docker Compose: the plugin ("docker compose"), or else the older standalone docker-compose, which
+# takes the same options for what is done here. CasaOS has compose built in and needs neither, so a
+# server may have none (Docker installed from the distribution's packages): backups, image checks and
+# the rest work without it, and only restoring and updating apps, which recreate the containers, ask
+# for it. systemd starts services without HOME, where docker also looks for its plugins.
+export HOME="${HOME:-/root}"
+COMPOSE=()
+find_compose() {
+	[ "${#COMPOSE[@]}" -gt 0 ] && return 0
+	if docker compose version >/dev/null 2>&1; then
+		COMPOSE=(docker compose)
+	elif command -v docker-compose >/dev/null && docker-compose version >/dev/null 2>&1; then
+		COMPOSE=(docker-compose)
+	else
+		return 1
+	fi
+}
+
+# Before anything is stopped or changed
+need_compose() {
+	find_compose || fail "Docker Compose is not installed on the server, and restoring or updating an app needs it: install the docker-compose-plugin package"
+}
+
 compose() {
+	find_compose || return 1
 	local vars=()
 	mapfile -t vars < <(compose_env)
-	env "${vars[@]}" docker compose -p "$APP" --project-directory "$APPS/$APP" -f "$APPS/$APP/docker-compose.yml" "$@"
+	env "${vars[@]}" "${COMPOSE[@]}" -p "$APP" --project-directory "$APPS/$APP" -f "$APPS/$APP/docker-compose.yml" "$@"
 }
 
 # Every host folder the containers use; docker knows them for bind mounts and named volumes alike
@@ -1797,7 +1821,6 @@ case "${1:-}" in
 		read_conf
 		rm -rf "$STAGE"
 		command -v docker >/dev/null || fail "Docker is not available"
-		docker compose version >/dev/null 2>&1 || fail "Docker Compose is not available"
 		write_status running preparing
 		do_backup
 		exit 0
@@ -1810,7 +1833,7 @@ case "${1:-}" in
 		read_conf
 		rm -rf "$STAGE"
 		command -v docker >/dev/null || fail "Docker is not available"
-		docker compose version >/dev/null 2>&1 || fail "Docker Compose is not available"
+		need_compose
 		write_status running preparing
 		do_update_app
 		exit 0
@@ -1833,7 +1856,9 @@ case "$ACTION" in
 		;;
 esac
 command -v docker >/dev/null || fail "Docker is not available"
-docker compose version >/dev/null 2>&1 || fail "Docker Compose is not available"
+case "$ACTION" in
+	restore|update-app) need_compose ;;
+esac
 
 case "$ACTION" in
 	scan)
