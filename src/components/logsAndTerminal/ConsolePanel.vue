@@ -118,8 +118,9 @@ export default {
 				let text
 				if (source === SERVER) {
 					const res = await this.$api.sys.getLogs()
-					// Each line of the CasaOS log starts with an 8 character prefix
-					text = String(res.data.data || '').replace(/\n(.{8})/gu, '\n').slice(8)
+					// The CasaOS log comes as it is on disk, each line starting with its date. The old UI cut
+					// 8 characters from every line (meant for the frame headers of Docker logs), eating "2026-11-"
+					text = String(res.data.data || '')
 				} else {
 					const res = await this.$openAPI.appManagement.compose.composeAppLogs(source, LOG_LINES)
 					text = String(res.data.data || '')

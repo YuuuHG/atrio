@@ -9,6 +9,8 @@ What changes in each Atrio release. The section for a version is also the text o
 - **App menu on phones**: on a narrow screen the menu of an app in the left column could open past the left edge,
   with half of its entries cut off. It now opens on the side with more room and always stays inside the screen; long
   entries wrap instead of widening it.
+- **Dates in the CasaOS log**: the console cut the first 8 characters of every line of the CasaOS log, so each line
+  started with `25T17:26:24` instead of `2026-11-25T17:26:24`. Lines now show their full date.
 
 ## 0.1.27 — 2026-11-24
 
