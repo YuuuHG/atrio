@@ -224,3 +224,34 @@ say "Starting push alerts and backups..."
 [ "$MODE" = "--update" ] || "$ROOT"/usr/local/bin/atrio-alerts || true
 # Tells the web UI that backups are available
 "$ROOT"/usr/local/bin/atrio-backup --init || true
+
+# Atrio 0.1.28, withdrawn the day it came out, put its own build of the CasaOS core in place of
+# /usr/bin/casaos (atrio-core). Atrio leaves CasaOS as it is: on the few servers that got it, the
+# original it kept goes back, and atrio-core goes away. Nothing else of CasaOS is ever touched.
+cleanup_core() {
+	local state="${ATRIO_STATE:-$ROOT/var/lib/casaos/atrio}" casaos="${ATRIO_CASAOS_BIN:-$ROOT/usr/bin/casaos}"
+	# Atrio's three cores of 0.1.28, and IceWhale's v0.4.15 for amd64, arm64 and armv7 (the tests name their own)
+	local ours="${ATRIO_OLD_CORES:-83f78d27738ce24d7e6cf7075808d02500256b70f201cab5f92df60e32371540 c6c60bc849d4b3686492be79a9b062b4b04775baa51f73f1bf6f362ca9d66045 f710aafd4ed4051797fe100eb344d993c64e3c756acfd4bc86dc60c273b5a7e9}"
+	local official="${ATRIO_OFFICIAL_CORES:-f7e39c308e3cc5c226c31b8971a8542007e577e45360514f87e7153f85a081da a9943f36f069d49057eb9aec34f1c4232c608f56751063095d7b8904f58a4883 99f7cef864668128c9e79923ab2a4db68f19c314b1d8bd65e01cd1b85e9ebefb}"
+	local current original
+	[ -e "$ROOT/usr/local/bin/atrio-core" ] || [ -d "$state/core" ] || return 0
+	systemctl disable --now atrio-core.path >/dev/null 2>&1 || true
+	rm -f "$ROOT"/etc/systemd/system/atrio-core.path "$ROOT"/etc/systemd/system/atrio-core.service \
+		"$ROOT"/usr/local/bin/atrio-core "$ROOT"/usr/local/share/atrio/casaos-core
+	systemctl daemon-reload
+	current=$(sha256sum < "$casaos" 2>/dev/null | cut -d' ' -f1)
+	original=$(sha256sum < "$state/core/casaos.original" 2>/dev/null | cut -d' ' -f1)
+	if [ -n "$current" ] && [[ " $ours " == *" $current "* ]]; then
+		if [ -z "$original" ] || [[ " $official " != *" $original "* ]]; then
+			# Without IceWhale's binary to put back, the fixed core keeps running and the folder stays
+			say "The original CasaOS core was not found: Atrio's build of it keeps running."
+			return 0
+		fi
+		say "Putting the original CasaOS core back..."
+		cp "$state/core/casaos.original" "$casaos.atrio-new" && chmod 755 "$casaos.atrio-new" && mv -f "$casaos.atrio-new" "$casaos" \
+			|| { rm -f "$casaos.atrio-new"; say "The original CasaOS core could not be put back."; return 0; }
+		systemctl restart casaos >/dev/null 2>&1 || true
+	fi
+	rm -rf "$state/core" "$state/core-status.json" "$state/core-request" "$state/core.lock"
+}
+cleanup_core

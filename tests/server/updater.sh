@@ -117,6 +117,40 @@ check "atrio-setup writes all 14 units" is "$units" 14
 check "it enables the timers" has "$FAKE_DOCKER/calls.log" "systemctl enable --now atrio-check-updates.timer"
 check "the services are executable" is "$(stat -c %a "$SB/root2/usr/local/bin/atrio-update")" 755
 check "and the release key is in place" test -s "$SB/root2/usr/local/share/atrio/release-key.gpg"
+# The leftovers of 0.1.28 (withdrawn): Atrio's build of the CasaOS core goes, IceWhale's comes back
+core_root() {
+	r="$SB/root-core$1"
+	mkdir -p "$r/etc/systemd/system" "$r/usr/local/bin" "$r/usr/local/share/atrio" "$r/usr/bin" "$r/state/core"
+	echo "official casaos" > "$r/official"
+	echo "atrio's casaos" > "$r/ours"
+	cp "$r/ours" "$r/usr/bin/casaos"
+	cp "$r/official" "$r/state/core/casaos.original"
+	echo '{"state":"fixed"}' > "$r/state/core-status.json"
+	touch "$r/usr/local/bin/atrio-core" "$r/etc/systemd/system/atrio-core.path" "$r/etc/systemd/system/atrio-core.service" "$r/usr/local/share/atrio/casaos-core"
+	export ATRIO_OLD_CORES="$(sha256sum < "$r/ours" | cut -d' ' -f1)" ATRIO_OFFICIAL_CORES="$(sha256sum < "$r/official" | cut -d' ' -f1)"
+}
+core_setup() { ATRIO_ROOT="$r" ATRIO_STATE="$r/state" bash "$SCRIPTS/atrio-setup" "$SB/server" >/dev/null 2>&1; }
+core_root 1
+core_setup
+check "the original CasaOS core is back" cmp -s "$r/usr/bin/casaos" "$r/official"
+check "CasaOS is restarted for it" has "$FAKE_DOCKER/calls.log" "systemctl restart casaos"
+check "atrio-core and its units are gone" test ! -e "$r/usr/local/bin/atrio-core" -a ! -e "$r/etc/systemd/system/atrio-core.path" -a ! -e "$r/etc/systemd/system/atrio-core.service"
+check "and its manifest" test ! -e "$r/usr/local/share/atrio/casaos-core"
+check "and what it kept" test ! -e "$r/state/core" -a ! -e "$r/state/core-status.json"
+: > "$FAKE_DOCKER/calls.log"
+core_setup
+check "a second setup leaves CasaOS alone" lacks "$FAKE_DOCKER/calls.log" "systemctl restart casaos"
+core_root 2
+rm "$r/state/core/casaos.original"
+core_setup
+check "without the original, Atrio's core keeps running" cmp -s "$r/usr/bin/casaos" "$r/ours"
+check "and the folder stays" test -d "$r/state/core"
+core_root 3
+echo "casaos v0.4.16" > "$r/usr/bin/casaos"
+core_setup
+check "another CasaOS is never touched" has "$r/usr/bin/casaos" "v0.4.16"
+check "while the leftovers go" test ! -e "$r/state/core"
+unset ATRIO_OLD_CORES ATRIO_OFFICIAL_CORES
 rm "$SB/server/atrio-backup"
 ATRIO_ROOT="$SB/root3" bash "$SCRIPTS/atrio-setup" "$SB/server" >/dev/null 2>&1
 check "atrio-setup refuses a folder with a service missing" test ! -e "$SB/root3/usr/local/bin/atrio-update"

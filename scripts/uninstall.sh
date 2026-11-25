@@ -23,7 +23,7 @@ main() {
 	fi
 
 	# The restore watcher would otherwise put Atrio straight back
-	systemctl disable --now atrio-update.path atrio-restore.path atrio-alerts.timer atrio-alerts-test.path atrio-backup.path atrio-backup-schedule.timer atrio-check-updates.timer >/dev/null 2>&1 || true
+	systemctl disable --now atrio-update.path atrio-restore.path atrio-alerts.timer atrio-alerts-test.path atrio-backup.path atrio-backup-schedule.timer atrio-check-updates.timer atrio-core.path >/dev/null 2>&1 || true
 	systemctl stop atrio-restore.service >/dev/null 2>&1 || true
 
 	# Stage the CasaOS UI next to the live folder, then swap with a rollback
@@ -52,7 +52,8 @@ main() {
 		"$UNITS"/atrio-alerts-test.service "$UNITS"/atrio-alerts-test.path "$ROOT"/usr/local/bin/atrio-alerts \
 		"$UNITS"/atrio-backup.service "$UNITS"/atrio-backup.path "$ROOT"/usr/local/bin/atrio-backup \
 		"$UNITS"/atrio-backup-schedule.service "$UNITS"/atrio-backup-schedule.timer \
-		"$UNITS"/atrio-check-updates.service "$UNITS"/atrio-check-updates.timer
+		"$UNITS"/atrio-check-updates.service "$UNITS"/atrio-check-updates.timer \
+		"$UNITS"/atrio-core.service "$UNITS"/atrio-core.path "$ROOT"/usr/local/bin/atrio-core
 	systemctl daemon-reload
 	# The backups stay where they are, and only this key can read them: it stays too, with the keys
 	# a settings file replaced (backup.key.replaced-*), the only ones that read the backups made before
