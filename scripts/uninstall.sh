@@ -23,15 +23,8 @@ main() {
 	fi
 
 	# The restore watcher would otherwise put Atrio straight back
-	systemctl disable --now atrio-update.path atrio-restore.path atrio-alerts.timer atrio-alerts-test.path atrio-backup.path atrio-backup-schedule.timer atrio-check-updates.timer atrio-core.path >/dev/null 2>&1 || true
+	systemctl disable --now atrio-update.path atrio-restore.path atrio-alerts.timer atrio-alerts-test.path atrio-backup.path atrio-backup-schedule.timer atrio-check-updates.timer >/dev/null 2>&1 || true
 	systemctl stop atrio-restore.service >/dev/null 2>&1 || true
-
-	# The CasaOS core Atrio fixed (CasaOS issue #2581): IceWhale's own goes back. If it cannot, the
-	# copy Atrio kept of it stays in $STATE/core.
-	if [ -x "$ROOT"/usr/local/bin/atrio-core ] && ! ATRIO_STATE="$STATE" ATRIO_CASAOS_BIN="$ROOT/usr/bin/casaos" \
-		ATRIO_CORE_MANIFEST="$ROOT/usr/local/share/atrio/casaos-core" "$ROOT"/usr/local/bin/atrio-core --restore; then
-		echo "The original CasaOS core could not be put back: Atrio's fixed one keeps running, and the original stays in $STATE/core." >&2
-	fi
 
 	# Stage the CasaOS UI next to the live folder, then swap with a rollback
 	rm -rf "$WWW.new" "$WWW.old"
@@ -59,16 +52,13 @@ main() {
 		"$UNITS"/atrio-alerts-test.service "$UNITS"/atrio-alerts-test.path "$ROOT"/usr/local/bin/atrio-alerts \
 		"$UNITS"/atrio-backup.service "$UNITS"/atrio-backup.path "$ROOT"/usr/local/bin/atrio-backup \
 		"$UNITS"/atrio-backup-schedule.service "$UNITS"/atrio-backup-schedule.timer \
-		"$UNITS"/atrio-check-updates.service "$UNITS"/atrio-check-updates.timer \
-		"$UNITS"/atrio-core.service "$UNITS"/atrio-core.path "$ROOT"/usr/local/bin/atrio-core
+		"$UNITS"/atrio-check-updates.service "$UNITS"/atrio-check-updates.timer
 	systemctl daemon-reload
 	# The backups stay where they are, and only this key can read them: it stays too, with the keys
 	# a settings file replaced (backup.key.replaced-*), the only ones that read the backups made before
 	if [ -f "$STATE/backup.key" ]; then
-		find "$STATE" -mindepth 1 -maxdepth 1 ! -name 'backup.key' ! -name 'backup.key.replaced-*' ! -name core -exec rm -rf {} + 2>/dev/null
+		find "$STATE" -mindepth 1 -maxdepth 1 ! -name 'backup.key' ! -name 'backup.key.replaced-*' -exec rm -rf {} + 2>/dev/null
 		echo "The backup key stays in $STATE/backup.key: Atrio's backups cannot be restored without it."
-	elif [ -d "$STATE/core" ]; then
-		find "$STATE" -mindepth 1 -maxdepth 1 ! -name core -exec rm -rf {} + 2>/dev/null
 	else
 		rm -rf "$STATE"
 	fi

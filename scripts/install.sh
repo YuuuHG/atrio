@@ -59,10 +59,8 @@ main() {
 	local SERVER="$SERVER_TMP"
 	echo "Downloading the updater, push alerts and backups..."
 	if [ -n "${ATRIO_SOURCE:-}" ]; then
-		cp "$ATRIO_SOURCE"/atrio-update "$ATRIO_SOURCE"/atrio-alerts "$ATRIO_SOURCE"/atrio-backup "$ATRIO_SOURCE"/atrio-core \
+		cp "$ATRIO_SOURCE"/atrio-update "$ATRIO_SOURCE"/atrio-alerts "$ATRIO_SOURCE"/atrio-backup \
 			"$ATRIO_SOURCE"/atrio-setup "$ATRIO_SOURCE"/atrio-release-key.gpg "$SERVER/"
-		# A manifest of fixed CasaOS cores, when the folder has one (to try them before a release)
-		if [ -f "$ATRIO_SOURCE/casaos-core" ]; then cp "$ATRIO_SOURCE/casaos-core" "$SERVER/"; fi
 	else
 		local base="https://github.com/$REPO/releases/download/$TAG"
 		# The key comes from the repository at that tag; the bundle must be signed with it
