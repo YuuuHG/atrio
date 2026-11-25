@@ -8,6 +8,7 @@
 #
 # Needs, outside the repository:
 #   ~/.config/atrio/gnupg         the signing key (scripts/atrio-release-key.gpg is its public half)
+#   ~/.local/go                   Go 1.23.4, for the fixed CasaOS core (casaos-core/build.sh)
 #   ~/.config/atrio/github-token  a fine-grained token for this repository only, Contents: read and write
 set -euo pipefail
 
@@ -31,6 +32,13 @@ out=build/release
 rm -rf "$out"
 pnpm build
 mkdir -p "$out"
+# The fixed CasaOS core (casaos-core/), one per processor: uploaded as release files, which atrio-core
+# downloads and checks against the manifest that travels, signed, in atrio-server.tar.gz
+casaos-core/build.sh
+core=build/casaos-core/out
+for target in amd64 arm64 arm-7; do
+	gzip -9 -n -c "$core/casaos-linux-$target" > "$out/casaos-core-linux-$target.gz"
+done
 # The updater and the public key travel with the web UI too: old updaters only ever install the web
 # UI, and from it the web UI puts this updater in their place (repairServer in atrioRelease.js)
 www=build/sysroot/var/lib/casaos/www
@@ -41,10 +49,15 @@ tar -czf "$out/atrio.tar.gz" -C "$www" .
 # The services that run on the server, installed by install.sh and by the updater (atrio-setup)
 # with the version inside, which the updater checks against the web UI it installs
 mkdir "$out/server"
-cp scripts/atrio-update scripts/atrio-alerts scripts/atrio-backup scripts/atrio-setup scripts/atrio-release-key.gpg "$out/server/"
+cp scripts/atrio-update scripts/atrio-alerts scripts/atrio-backup scripts/atrio-core scripts/atrio-setup scripts/atrio-release-key.gpg "$out/server/"
 echo "${tag#v}" > "$out/server/VERSION"
+{
+	echo "RELEASE=$tag"
+	grep '^FIX=' casaos-core/build.sh
+	while read -r sum file; do echo "${file#casaos-linux-}=$sum"; done < "$core/SHA256SUMS"
+} > "$out/server/casaos-core"
 tar -czf "$out/atrio-server.tar.gz" --owner=0 --group=0 -C "$out/server" \
-	atrio-update atrio-alerts atrio-backup atrio-setup atrio-release-key.gpg VERSION
+	atrio-update atrio-alerts atrio-backup atrio-core atrio-setup atrio-release-key.gpg casaos-core VERSION
 rm -rf "$out/server"
 for file in atrio.tar.gz atrio-server.tar.gz; do
 	gpg --batch --yes --local-user "Atrio release signing" --detach-sign -o "$out/$file.sig" "$out/$file"
@@ -70,7 +83,8 @@ release=$(python3 -c 'import json, sys; print(json.dumps({"tag_name": sys.argv[1
 	"$tag" "$out/notes.md" "$prerelease" | api -X POST "https://api.github.com/repos/$repo/releases" --data-binary @-)
 id=$(printf '%s' "$release" | python3 -c 'import json, sys; print(json.load(sys.stdin)["id"])')
 
-for file in atrio.tar.gz atrio.tar.gz.sha256 atrio.tar.gz.sig atrio-server.tar.gz atrio-server.tar.gz.sig; do
+for file in atrio.tar.gz atrio.tar.gz.sha256 atrio.tar.gz.sig atrio-server.tar.gz atrio-server.tar.gz.sig \
+	casaos-core-linux-amd64.gz casaos-core-linux-arm64.gz casaos-core-linux-arm-7.gz; do
 	api -X POST -H 'Content-Type: application/octet-stream' --data-binary @"$out/$file" \
 		"https://uploads.github.com/repos/$repo/releases/$id/assets?name=$file" >/dev/null
 done

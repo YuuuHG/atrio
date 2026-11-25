@@ -13,7 +13,7 @@ MODE="${2:-}"
 ROOT="${ATRIO_ROOT:-}"
 [ -n "$SRC" ] && [ -d "$SRC" ] || { echo "Usage: atrio-setup DIR [--update]" >&2; exit 1; }
 [ -n "$ROOT" ] || [ "$(id -u)" -eq 0 ] || { echo "atrio-setup must run as root" >&2; exit 1; }
-for file in atrio-update atrio-alerts atrio-backup atrio-release-key.gpg; do
+for file in atrio-update atrio-alerts atrio-backup atrio-core atrio-release-key.gpg; do
 	[ -f "$SRC/$file" ] && [ ! -L "$SRC/$file" ] || { echo "Missing $file in $SRC" >&2; exit 1; }
 done
 
@@ -46,6 +46,16 @@ install_script atrio-update
 # as set in Atrio's settings ($STATE/alerts.conf)
 install_script atrio-alerts
 install_script atrio-backup
+# The fixed CasaOS core (CasaOS issue #2581): the script, and what this release says about its cores.
+# A copy of Atrio from its repository has no cores, and says so in the settings.
+install_script atrio-core
+if [ -f "$SRC/casaos-core" ] && [ ! -L "$SRC/casaos-core" ]; then
+	cp "$SRC/casaos-core" "$ROOT"/usr/local/share/atrio/casaos-core.tmp
+	chmod 644 "$ROOT"/usr/local/share/atrio/casaos-core.tmp
+	mv "$ROOT"/usr/local/share/atrio/casaos-core.tmp "$ROOT"/usr/local/share/atrio/casaos-core
+else
+	rm -f "$ROOT"/usr/local/share/atrio/casaos-core
+fi
 
 say "Setting up their services..."
 cat > "$ROOT"/etc/systemd/system/atrio-update.service <<'UNIT'
@@ -186,7 +196,8 @@ OnCalendar=*:0/15
 WantedBy=timers.target
 UNIT
 
-# New versions of apps on "latest": the registries are asked every 6 hours
+# New versions of apps on "latest": the registries are asked every 6 hours. The fixed CasaOS core is
+# checked then too: a download that failed is tried again, and a CasaOS installed again gets it back.
 cat > "$ROOT"/etc/systemd/system/atrio-check-updates.service <<'UNIT'
 [Unit]
 Description=Check the registries for new versions of the apps
@@ -194,8 +205,33 @@ After=docker.service network-online.target
 
 [Service]
 Type=oneshot
+ExecStart=-/usr/local/bin/atrio-core
 ExecStart=/usr/local/bin/atrio-backup --check-updates
 TimeoutStartSec=30min
+UNIT
+
+# The fix for the CasaOS core turned on or off in the settings: Atrio writes $STATE/core-request
+cat > "$ROOT"/etc/systemd/system/atrio-core.service <<'UNIT'
+[Unit]
+Description=Turn Atrio's fix for the CasaOS core on or off
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/atrio-core --request
+TimeoutStartSec=15min
+UNIT
+
+cat > "$ROOT"/etc/systemd/system/atrio-core.path <<'UNIT'
+[Unit]
+Description=Watch for requests from Atrio's setting for the CasaOS core
+StartLimitIntervalSec=0
+
+[Path]
+PathExists=/var/lib/casaos/atrio/core-request
+
+[Install]
+WantedBy=multi-user.target
 UNIT
 
 cat > "$ROOT"/etc/systemd/system/atrio-check-updates.timer <<'UNIT'
@@ -219,8 +255,13 @@ systemctl enable --now atrio-alerts-test.path >/dev/null
 systemctl enable --now atrio-backup.path >/dev/null
 systemctl enable --now atrio-backup-schedule.timer >/dev/null
 systemctl enable --now atrio-check-updates.timer >/dev/null
+systemctl enable --now atrio-core.path >/dev/null
 say "Starting push alerts and backups..."
 # A first run writes the status the settings read (alerts stay off until set up there)
 [ "$MODE" = "--update" ] || "$ROOT"/usr/local/bin/atrio-alerts || true
 # Tells the web UI that backups are available
 "$ROOT"/usr/local/bin/atrio-backup --init || true
+# Last, as it restarts CasaOS when the core changes: everything else is in place by then
+say "Checking the CasaOS core..."
+ATRIO_CASAOS_BIN="${ATRIO_CASAOS_BIN:-$ROOT/usr/bin/casaos}" ATRIO_CORE_MANIFEST="${ATRIO_CORE_MANIFEST:-$ROOT/usr/local/share/atrio/casaos-core}" \
+	"$ROOT"/usr/local/bin/atrio-core || true

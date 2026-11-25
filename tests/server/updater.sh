@@ -15,7 +15,7 @@ echo '<html>Atrio</html>' > "$SB/build/index.html"
 echo '{"version":"9.9.9"}' > "$SB/build/atrio-version.json"
 tar -czf "$SB/rel/atrio.tar.gz" -C "$SB/build" .
 (cd "$SB/rel" && sha256sum atrio.tar.gz > atrio.tar.gz.sha256)
-mkdir "$SB/server" && cp "$SCRIPTS"/atrio-update "$SCRIPTS"/atrio-alerts "$SCRIPTS"/atrio-backup "$SCRIPTS"/atrio-setup "$SB/server/"
+mkdir "$SB/server" && cp "$SCRIPTS"/atrio-update "$SCRIPTS"/atrio-alerts "$SCRIPTS"/atrio-backup "$SCRIPTS"/atrio-core "$SCRIPTS"/atrio-setup "$SB/server/"
 cp "$SB/key.gpg" "$SB/server/atrio-release-key.gpg"
 echo 9.9.9 > "$SB/server/VERSION"
 tar -czf "$SB/rel/atrio-server.tar.gz" -C "$SB/server" .
@@ -113,10 +113,19 @@ check "a request that could not run is not left behind" test ! -e "$ATRIO_STATE/
 # atrio-setup alone: every service and unit, from a folder with the release's scripts
 ATRIO_ROOT="$SB/root2" bash -c 'mkdir -p "$ATRIO_ROOT/etc/systemd/system" "$ATRIO_ROOT/usr/local/bin"; bash "$1" "$2"' _ "$SCRIPTS/atrio-setup" "$SB/server" >/dev/null 2>&1
 units=$(ls "$SB/root2/etc/systemd/system" | wc -l)
-check "atrio-setup writes all 14 units" is "$units" 14
+check "atrio-setup writes all 16 units" is "$units" 16
 check "it enables the timers" has "$FAKE_DOCKER/calls.log" "systemctl enable --now atrio-check-updates.timer"
+check "and the setting for the CasaOS core" has "$FAKE_DOCKER/calls.log" "systemctl enable --now atrio-core.path"
 check "the services are executable" is "$(stat -c %a "$SB/root2/usr/local/bin/atrio-update")" 755
+check "atrio-core among them" is "$(stat -c %a "$SB/root2/usr/local/bin/atrio-core")" 755
 check "and the release key is in place" test -s "$SB/root2/usr/local/share/atrio/release-key.gpg"
+check "a release from the repository has no fixed core" test ! -e "$SB/root2/usr/local/share/atrio/casaos-core"
+check "it checks the core of its own root, never this machine's" has "$ATRIO_STATE/core-status.json" "CasaOS is not installed in $SB/root2/usr/bin/casaos"
+check "the 6-hour check looks at the core too" has "$SB/root2/etc/systemd/system/atrio-check-updates.service" "ExecStart=-/usr/local/bin/atrio-core"
+printf 'RELEASE=v9.9.9\nFIX=1\n' > "$SB/server/casaos-core"
+ATRIO_ROOT="$SB/root2" bash "$SCRIPTS/atrio-setup" "$SB/server" >/dev/null 2>&1
+check "a release's manifest of cores is installed" has "$SB/root2/usr/local/share/atrio/casaos-core" "RELEASE=v9.9.9"
+rm "$SB/server/casaos-core"
 rm "$SB/server/atrio-backup"
 ATRIO_ROOT="$SB/root3" bash "$SCRIPTS/atrio-setup" "$SB/server" >/dev/null 2>&1
 check "atrio-setup refuses a folder with a service missing" test ! -e "$SB/root3/usr/local/bin/atrio-update"

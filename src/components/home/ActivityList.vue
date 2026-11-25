@@ -31,6 +31,8 @@ const ACTIONS = {
 	'export-settings': ['download-outline', 'Settings saved to a file', 'Settings could not be saved: {detail}'],
 	'import-settings': ['upload-outline', 'Settings loaded from a file', 'Settings could not be loaded: {detail}'],
 	'atrio-update': ['update', 'Atrio {detail} installed'],
+	'core-on': ['shield-check-outline', 'CasaOS now runs Atrio\'s build of its core, without the bug that made it stop', 'Atrio\'s build of the CasaOS core was not kept: {detail}'],
+	'core-off': ['shield-alert-outline', 'CasaOS went back to IceWhale\'s original core'],
 	'tailscale': ['vpn', '{detail}', '{detail}'],
 }
 

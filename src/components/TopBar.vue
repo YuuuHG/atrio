@@ -1,5 +1,6 @@
 <script>
 import AtrioUpdate from '@/components/settings/AtrioUpdate.vue'
+import CasaOSCore from '@/components/settings/CasaOSCore.vue'
 import PushAlerts from '@/components/settings/PushAlerts.vue'
 import SettingsBackup from '@/components/settings/SettingsBackup.vue'
 import UnusedImages from '@/components/settings/UnusedImages.vue'
@@ -25,6 +26,7 @@ export default {
   name: 'TopBar',
   components: {
     AtrioUpdate,
+    CasaOSCore,
     PushAlerts,
     SettingsBackup,
     UnusedImages,
@@ -762,6 +764,7 @@ export default {
                     {{ $t('Update') }}
                   </button>
                 </div>
+                <CasaOSCore />
                 <AtrioUpdate />
               </section>
 

@@ -322,6 +322,9 @@ export async function listCloudServices() {
     name: service.name,
     icon: (service.icon || '').replace(/^\.\//, '/'),
     authUrl: service.auth_url,
+    // Atrio's build of the CasaOS core has no keys for these services (see casaos-core/): its sign-in
+    // link names no app, and only the original core can connect a new drive
+    needsOriginalCore: /client_id=private(%20|\+| )build/.test(service.auth_url || ''),
   }))
 }
 

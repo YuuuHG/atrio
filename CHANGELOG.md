@@ -6,6 +6,16 @@ What changes in each Atrio release. The section for a version is also the text o
 
 **New**
 
+- **Fix for CasaOS crashes** ([IceWhaleTech/CasaOS#2581](https://github.com/IceWhaleTech/CasaOS/issues/2581)):
+  CasaOS v0.4.15 stops several times a day ("fatal error: found pointer to free object") and restarts, and for those
+  seconds the web UI does not answer. The cause is a bad copy of the network counters, read every 5 seconds; the fix
+  was never released by IceWhale. Atrio now builds CasaOS v0.4.15 with it (`casaos-core/`, reproducible byte for
+  byte) and, on servers that run IceWhale's own v0.4.15 binary, puts it in place of `/usr/bin/casaos` after
+  checking its SHA-256, keeping the original. If CasaOS does not stay up with it, the original goes back by itself;
+  any other version of CasaOS is never touched.
+  Settings → Updates → **Fix for CasaOS crashes** turns it off and on: connecting a new Google Drive, Dropbox or
+  OneDrive needs the original core, and Files now says so instead of opening a sign-in that fails. Removing Atrio
+  puts the original back.
 - **Repeated lines in the CasaOS log**: CasaOS writes the same line about the CPU sensor every 5 minutes, which made up
   most of its log. In the console, a line repeated in a row now shows once, the latest one, with how many times and
   since when (`×22 since 13:59`). The line count and the download still have every line.

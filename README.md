@@ -14,7 +14,7 @@ thing you see, clean and quick to get around.
 
 Atrio is a fork of [CasaOS-UI](https://github.com/IceWhaleTech/CasaOS-UI) by [IceWhale Technology](https://github.com/IceWhaleTech).
 It talks to the standard CasaOS backend, so it replaces only the web interface: your apps, settings and data stay
-the same.
+the same. The one exception is a [fix for the crashes of CasaOS v0.4.15](#fix-for-casaos-crashes) itself.
 
 <p align="center">
   <img alt="The Atrio dashboard: greeting, live widgets and the app grid over a mountain wallpaper" src="docs/screenshots/dashboard.jpg">
@@ -110,8 +110,28 @@ Then reload CasaOS in your browser with `Ctrl+F5`. The script:
   which stays off until you set it up in Settings → Push notifications;
 - installs the backup service (`/usr/local/bin/atrio-backup`, with `atrio-backup.path`, `atrio-backup-schedule.timer`
   for automatic backups and app updates, and `atrio-check-updates.timer`, which looks for new versions of the apps every 6 hours).
+- on CasaOS v0.4.15, puts Atrio's build of the same version in place of `/usr/bin/casaos`, without the bug that
+  makes it stop several times a day, and keeps the original (see [Fix for CasaOS crashes](#fix-for-casaos-crashes)).
 
-Nothing else changes: CasaOS, your apps and their data are left as they are.
+Nothing else changes: your apps and their data are left as they are.
+
+## Fix for CasaOS crashes
+
+CasaOS v0.4.15 stops and restarts by itself several times a day: for a few seconds the web UI does not answer, and
+`journalctl -u casaos` shows `fatal error: found pointer to free object`
+([IceWhaleTech/CasaOS#2581](https://github.com/IceWhaleTech/CasaOS/issues/2581)). It comes from a bad copy of the
+network counters that CasaOS reads every 5 seconds. The fix is known but was never released by IceWhale, so Atrio
+builds CasaOS v0.4.15 with it, from the same source, and publishes the result with each release
+([casaos-core](casaos-core/README.md) explains the bug, the change and how to rebuild the same files yourself).
+
+On a server that runs IceWhale's own v0.4.15 binary, the services of Atrio download the fixed core for its
+processor (amd64, arm64 or armv7), check it against the SHA-256 in their signed bundle, keep the original in
+`/var/lib/casaos/atrio/core`, put the fixed one in place and restart CasaOS. If CasaOS does not stay up with it,
+the original goes back straight away. Any other version of CasaOS, or a core someone else changed, is left alone.
+
+Settings → Updates → **Fix for CasaOS crashes** shows whether it is on, and turns it off and on. Turn it off to
+connect a new Google Drive, Dropbox or OneDrive in Files: Atrio's build does not have IceWhale's keys for them.
+Drives already connected keep working with the fix on. Removing Atrio puts the original core back.
 
 ## Update
 

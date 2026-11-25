@@ -834,6 +834,10 @@ function connectCloud(index) {
   const service = cloudServices.value[index]
   if (!service)
     return
+  if (service.needsOriginalCore) {
+    notify(t('cloudNeedsOriginalCore', { name: service.name }), 'error')
+    return
+  }
   const origin = `${vm.$protocol || window.location.protocol}//${vm.$baseURL || window.location.host}`
   if (openCloudSignIn(service, origin))
     notify(t('cloudWindow', { name: service.name }))

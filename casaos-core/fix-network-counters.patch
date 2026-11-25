@@ -1,0 +1,152 @@
+diff --git a/model/net.go b/model/net.go
+index 1f2897a..652f54f 100644
+--- a/model/net.go
++++ b/model/net.go
+@@ -1,5 +1,10 @@
++// Changed by Atrio (https://github.com/peppeaiello/atrio): IOCountersStatFrom replaces the
++// unsafe.Pointer conversions that crashed CasaOS (https://github.com/IceWhaleTech/CasaOS/issues/2581).
++
+ package model
+ 
++import "github.com/shirou/gopsutil/v3/net"
++
+ type IOCountersStat struct {
+ 	Name        string `json:"name"`        // interface name
+ 	BytesSent   uint64 `json:"bytesSent"`   // number of bytes sent
+@@ -15,3 +20,22 @@ type IOCountersStat struct {
+ 	State       string `json:"state"`
+ 	Time        int64  `json:"time"`
+ }
++
++// IOCountersStatFrom copies the counters of a network interface field by field. Converting the
++// pointer instead read 120 bytes out of the 96 of net.IOCountersStat: State and Time got whatever
++// came after it, and the garbage collector crashed on the bad string pointer.
++func IOCountersStatFrom(n net.IOCountersStat) IOCountersStat {
++	return IOCountersStat{
++		Name:        n.Name,
++		BytesSent:   n.BytesSent,
++		BytesRecv:   n.BytesRecv,
++		PacketsSent: n.PacketsSent,
++		PacketsRecv: n.PacketsRecv,
++		Errin:       n.Errin,
++		Errout:      n.Errout,
++		Dropin:      n.Dropin,
++		Dropout:     n.Dropout,
++		Fifoin:      n.Fifoin,
++		Fifoout:     n.Fifoout,
++	}
++}
+diff --git a/model/net_test.go b/model/net_test.go
+new file mode 100644
+index 0000000..b95827f
+--- /dev/null
++++ b/model/net_test.go
+@@ -0,0 +1,42 @@
++// Added by Atrio (https://github.com/peppeaiello/atrio): checks IOCountersStatFrom.
++
++package model
++
++import (
++	"reflect"
++	"testing"
++
++	"github.com/shirou/gopsutil/v3/net"
++)
++
++// Every field of gopsutil's counters must reach IOCountersStat with its value, so that a field added
++// to either struct is not silently dropped.
++func TestIOCountersStatFromCopiesEveryField(t *testing.T) {
++	var n net.IOCountersStat
++	src := reflect.ValueOf(&n).Elem()
++	for i := 0; i < src.NumField(); i++ {
++		switch f := src.Field(i); f.Kind() {
++		case reflect.String:
++			f.SetString("eth" + string(rune('0'+i)))
++		case reflect.Uint64:
++			f.SetUint(uint64(1000 + i))
++		default:
++			t.Fatalf("unexpected field %s of kind %s", src.Type().Field(i).Name, f.Kind())
++		}
++	}
++	item := IOCountersStatFrom(n)
++	dst := reflect.ValueOf(item)
++	for i := 0; i < src.NumField(); i++ {
++		name := src.Type().Field(i).Name
++		got := dst.FieldByName(name)
++		if !got.IsValid() {
++			t.Fatalf("IOCountersStat has no field %s", name)
++		}
++		if got.Interface() != src.Field(i).Interface() {
++			t.Errorf("%s = %v, want %v", name, got.Interface(), src.Field(i).Interface())
++		}
++	}
++	if item.State != "" || item.Time != 0 {
++		t.Errorf("State and Time must start empty, got %q and %d", item.State, item.Time)
++	}
++}
+diff --git a/route/periodical.go b/route/periodical.go
+index 223b6ad..cd87505 100644
+--- a/route/periodical.go
++++ b/route/periodical.go
+@@ -11,12 +11,14 @@
+  * @Website: https://www.casaos.io
+  * Copyright (c) 2022 by icewhale, All Rights Reserved.
+  */
++// Changed by Atrio (https://github.com/peppeaiello/atrio): the network counters are copied with
++// model.IOCountersStatFrom (https://github.com/IceWhaleTech/CasaOS/issues/2581).
++
+ package route
+ 
+ import (
+ 	"strings"
+ 	"time"
+-	"unsafe"
+ 
+ 	"github.com/IceWhaleTech/CasaOS/model"
+ 	"github.com/IceWhaleTech/CasaOS/service"
+@@ -29,7 +31,7 @@ func SendAllHardwareStatusBySocket() {
+ 	for _, n := range netList {
+ 		for _, netCardName := range nets {
+ 			if n.Name == netCardName {
+-				item := *(*model.IOCountersStat)(unsafe.Pointer(&n))
++				item := model.IOCountersStatFrom(n)
+ 				item.State = strings.TrimSpace(service.MyService.System().GetNetState(n.Name))
+ 				item.Time = time.Now().Unix()
+ 				newNet = append(newNet, item)
+diff --git a/route/v1/system.go b/route/v1/system.go
+index a54b73e..a6b322a 100644
+--- a/route/v1/system.go
++++ b/route/v1/system.go
+@@ -1,3 +1,6 @@
++// Changed by Atrio (https://github.com/peppeaiello/atrio): the network counters are copied with
++// model.IOCountersStatFrom (https://github.com/IceWhaleTech/CasaOS/issues/2581).
++
+ package v1
+ 
+ import (
+@@ -12,7 +15,6 @@ import (
+ 	"strconv"
+ 	"strings"
+ 	"time"
+-	"unsafe"
+ 
+ 	http2 "github.com/IceWhaleTech/CasaOS-Common/utils/http"
+ 	"github.com/IceWhaleTech/CasaOS-Common/utils/port"
+@@ -228,7 +230,7 @@ func GetSystemUtilization(ctx echo.Context) error {
+ 	for _, n := range netList {
+ 		for _, netCardName := range nets {
+ 			if n.Name == netCardName {
+-				item := *(*model.IOCountersStat)(unsafe.Pointer(&n))
++				item := model.IOCountersStatFrom(n)
+ 				item.State = strings.TrimSpace(service.MyService.System().GetNetState(n.Name))
+ 				item.Time = time.Now().Unix()
+ 				newNet = append(newNet, item)
+@@ -299,7 +301,7 @@ func GetSystemNetInfo(ctx echo.Context) error {
+ 	for _, n := range netList {
+ 		for _, netCardName := range service.MyService.System().GetNet(true) {
+ 			if n.Name == netCardName {
+-				item := *(*model.IOCountersStat)(unsafe.Pointer(&n))
++				item := model.IOCountersStatFrom(n)
+ 				item.State = strings.TrimSpace(service.MyService.System().GetNetState(n.Name))
+ 				item.Time = time.Now().Unix()
+ 				newNet = append(newNet, item)

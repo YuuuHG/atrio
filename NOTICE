@@ -8,5 +8,10 @@ Copyright IceWhale Technology, licensed under the Apache License 2.0.
 Changes from the original are recorded in the git history of this
 repository, starting after commit 400a22c.
 
+The fixed CasaOS core that Atrio installs on CasaOS v0.4.15 (casaos-core/)
+is built from CasaOS (https://github.com/IceWhaleTech/CasaOS),
+Copyright IceWhale Technology, licensed under the Apache License 2.0,
+with the changes in casaos-core/fix-network-counters.patch.
+
 CasaOS and the CasaOS logo are trademarks of their respective owners.
 Atrio is not affiliated with or endorsed by IceWhale Technology.

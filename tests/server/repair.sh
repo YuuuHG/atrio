@@ -19,7 +19,7 @@ cp "$SCRIPTS/atrio-update" "$SB/build/server/"
 cp "$SB/key.gpg" "$SB/build/server/atrio-release-key.gpg"
 tar -czf "$SB/rel/atrio.tar.gz" -C "$SB/build" .
 (cd "$SB/rel" && sha256sum atrio.tar.gz > atrio.tar.gz.sha256)
-cp "$SCRIPTS"/atrio-update "$SCRIPTS"/atrio-alerts "$SCRIPTS"/atrio-backup "$SCRIPTS"/atrio-setup "$SB/server/"
+cp "$SCRIPTS"/atrio-update "$SCRIPTS"/atrio-alerts "$SCRIPTS"/atrio-backup "$SCRIPTS"/atrio-core "$SCRIPTS"/atrio-setup "$SB/server/"
 cp "$SB/key.gpg" "$SB/server/atrio-release-key.gpg"
 echo 9.9.9 > "$SB/server/VERSION"
 tar -czf "$SB/rel/atrio-server.tar.gz" -C "$SB/server" .
