@@ -2,6 +2,14 @@
 
 What changes in each Atrio release. The section for a version is also the text of its GitHub release.
 
+## 0.1.28 — unreleased
+
+**Fixed**
+
+- **App menu on phones**: on a narrow screen the menu of an app in the left column could open past the left edge,
+  with half of its entries cut off. It now opens on the side with more room and always stays inside the screen; long
+  entries wrap instead of widening it.
+
 ## 0.1.27 — 2026-11-24
 
 **Fixed**

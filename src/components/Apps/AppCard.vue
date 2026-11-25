@@ -264,13 +264,39 @@ export default {
         const rect = trigger.getBoundingClientRect()
         const below = window.innerHeight - rect.bottom
         const up = below < menu.offsetHeight + 8 && rect.top > below
-        const left = window.innerWidth - rect.left < menu.offsetWidth + 8
+        // On a narrow phone the menu may fit on neither side: the side with more room, then kept
+        // inside the screen by keepDropdownInside
+        const roomRight = window.innerWidth - rect.left
+        const left = roomRight < menu.offsetWidth + 8 && rect.right > roomRight
         const position = `is-${up ? 'top' : 'bottom'}-${left ? 'left' : 'right'}`
         if (position === this.dropdownPosition)
-          return
+          return this.keepDropdownInside()
         this.dropdownPosition = position
-        this.$nextTick(() => dropdown.updateAppendToBody())
+        this.$nextTick(() => {
+          dropdown.updateAppendToBody()
+          this.keepDropdownInside()
+        })
       }))
+    },
+    // Atrio: Buefy places the menu against the button, even past the edge of the screen; move it
+    // back so that it stays 8px inside both edges. Worked out from the place Buefy has just chosen,
+    // which the page only shows after the next render
+    keepDropdownInside() {
+      const dropdown = this.$refs.dro
+      const menu = dropdown?.$refs.dropdownMenu
+      const placed = Number.parseFloat(dropdown?.style?.left)
+      if (!menu || Number.isNaN(placed))
+        return
+      const margin = 8
+      const left = placed - window.scrollX
+      const right = left + menu.offsetWidth
+      let shift = 0
+      if (right > window.innerWidth - margin)
+        shift = window.innerWidth - margin - right
+      if (left + shift < margin)
+        shift = margin - left
+      if (Math.abs(shift) >= 0.5)
+        dropdown.style = { ...dropdown.style, left: `${placed + shift}px` }
     },
     // Atrio: the tile link opens the app in a new tab by itself; keep CasaOS's bookkeeping
     onTileLink() {
@@ -1083,6 +1109,7 @@ export default {
 // page (append-to-body) without the tile's classes, so it is found by its own content.
 .dropdown-menu:has(.atrio-app-menu) {
   min-width: 12rem;
+  max-width: calc(100vw - 16px);
 }
 
 .dropdown-content:has(.atrio-app-menu) {
@@ -1099,8 +1126,10 @@ export default {
   .button.is-text {
     justify-content: flex-start;
     width: 100%;
-    height: 2.25rem;
-    padding: 0 0.875rem;
+    height: auto;
+    min-height: 2.25rem;
+    padding: 0.5rem 0.875rem;
+    white-space: normal;
     border: 0 !important;
     border-radius: 0.5rem;
     background: transparent;
