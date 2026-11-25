@@ -4,6 +4,12 @@ What changes in each Atrio release. The section for a version is also the text o
 
 ## 0.1.28 — unreleased
 
+**New**
+
+- **Repeated lines in the CasaOS log**: CasaOS writes the same line about the CPU sensor every 5 minutes, which made up
+  most of its log. In the console, a line repeated in a row now shows once, the latest one, with how many times and
+  since when (`×22 since 13:59`). The line count and the download still have every line.
+
 **Fixed**
 
 - **App menu on phones**: on a narrow screen the menu of an app in the left column could open past the left edge,

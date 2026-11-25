@@ -10,6 +10,8 @@ const SERVER = 'casaos'
 const POLL_MS = 3000
 const LOG_LINES = 1000
 const ANSI = /\x1B\[[0-9;]*[A-Za-z]/g
+// Each line of the CasaOS log starts with its date: "2026-11-25T17:31:19.026+0100<tab>info<tab>…"
+const LOG_DATE = /^(\d{4}-\d\d-\d\d)T(\d\d:\d\d)\S*\t/
 
 export default {
 	name: 'ConsolePanel',
@@ -46,13 +48,48 @@ export default {
 			const filter = this.appFilter.trim().toLowerCase()
 			return filter ? this.apps.filter((app) => `${app.title} ${app.name}`.toLowerCase().includes(filter)) : this.apps
 		},
-		shownLogs() {
+		// Every line that passes the filter: what the count and the download use
+		filteredLogs() {
 			const filter = this.logFilter.trim().toLowerCase()
 			if (!filter) return this.logs
 			return this.logs.split('\n').filter((line) => line.toLowerCase().includes(filter)).join('\n')
 		},
 		lineCount() {
-			return this.shownLogs ? this.shownLogs.split('\n').length : 0
+			return this.filteredLogs ? this.filteredLogs.split('\n').length : 0
+		},
+		// What the log box shows. In the CasaOS log the same message repeated in a row (the CPU sensor every
+		// 5 minutes) becomes its latest line, marked with how many times and since when; other lines stay as they are
+		logSegments() {
+			const text = this.filteredLogs
+			if (!text || this.current !== SERVER) return text ? [{ text }] : []
+			const segments = []
+			const lines = text.split('\n')
+			let plain = []
+			for (let start = 0; start < lines.length;) {
+				const message = lines[start].replace(LOG_DATE, '')
+				let end = start + 1
+				if (message.trim()) {
+					while (end < lines.length && lines[end].replace(LOG_DATE, '') === message) end++
+				}
+				if (end - start > 1) {
+					if (plain.length) segments.push({ text: `${plain.join('\n')}\n` })
+					plain = []
+					const first = lines[start].match(LOG_DATE)
+					const last = lines[end - 1].match(LOG_DATE)
+					segments.push({
+						text: `${lines[end - 1]}\n`,
+						count: end - start,
+						sinceDate: first && last && first[1] !== last[1] ? first[1] : '',
+						sinceTime: first ? first[2] : '',
+					})
+				} else {
+					plain.push(lines[start])
+				}
+				start = end
+			}
+			if (plain.length) segments.push({ text: plain.join('\n') })
+			else segments[segments.length - 1].text = segments[segments.length - 1].text.slice(0, -1)
+			return segments
 		},
 		terminalAvailable() {
 			return this.current === SERVER || (this.currentApp?.status === 'running' && !!this.container)
@@ -147,8 +184,14 @@ export default {
 			this.view = view
 			if (view === 'logs') this.loadLogs()
 		},
+		repeatLabel(segment) {
+			const { count, sinceDate: date, sinceTime: time } = segment
+			if (!time) return this.$t('×{count}', { count })
+			return date ? this.$t('×{count} since {date} {time}', { count, date, time }) : this.$t('×{count} since {time}', { count, time })
+		},
 		downloadLogs() {
-			const blob = new Blob([this.shownLogs], { type: 'text/plain' })
+			// Every line, also the repeated ones the box shows as one
+			const blob = new Blob([this.filteredLogs], { type: 'text/plain' })
 			const link = document.createElement('a')
 			link.href = URL.createObjectURL(blob)
 			link.download = `${this.current}-logs.txt`
@@ -215,12 +258,17 @@ export default {
 						{{ $t('Follow') }}
 					</label>
 					<span class="atrio-console-count">{{ $t('{count} lines', { count: lineCount }) }}</span>
-					<button :disabled="!shownLogs" class="atrio-button is-small" type="button" @click="downloadLogs">
+					<button :disabled="!filteredLogs" class="atrio-button is-small" type="button" @click="downloadLogs">
 						<b-icon icon="download" pack="mdi" size="is-16" />
 						{{ $t('Download') }}
 					</button>
 				</div>
-				<pre ref="logs" class="atrio-console-logs">{{ shownLogs || (logFilter ? $t('No lines match the filter') : logsFailed ? $t('The logs could not be read: is the app running? Trying again…') : $t('Loading…')) }}</pre>
+				<!-- Whitespace inside <pre> is shown, so the text between these tags stays on one line -->
+				<pre ref="logs" class="atrio-console-logs"><template v-if="filteredLogs"><template
+					v-for="(segment, index) in logSegments" :key="index"
+				><span v-if="segment.count" class="atrio-console-repeat">{{ repeatLabel(segment) }}</span>{{ segment.text }}</template></template><template
+					v-else
+				>{{ logFilter ? $t('No lines match the filter') : logsFailed ? $t('The logs could not be read: is the app running? Trying again…') : $t('Loading…') }}</template></pre>
 			</template>
 
 			<div v-else class="atrio-console-terminal">
@@ -506,6 +554,19 @@ export default {
 	word-break: break-word;
 	scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
 	scrollbar-width: thin;
+
+	// Count of a line repeated in a row; left out when the text is copied
+	.atrio-console-repeat {
+		display: inline-block;
+		margin-right: 0.5rem;
+		padding: 0 0.45rem;
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.1);
+		color: #94a3b8;
+		font-size: 0.75rem;
+		line-height: 1.5;
+		user-select: none;
+	}
 }
 
 .atrio-console-terminal {
