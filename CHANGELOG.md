@@ -2,6 +2,15 @@
 
 What changes in each Atrio release. The section for a version is also the text of its GitHub release.
 
+## 0.1.30 — 2026-11-25
+
+**Fixed**
+
+- **CasaOS left as it is**: 0.1.28, withdrawn a few minutes after its release, put Atrio's own build of the CasaOS
+  v0.4.15 core in place of `/usr/bin/casaos` on the few servers that installed it then. Atrio replaces the web UI
+  only, so on those servers this update puts IceWhale's original core back (CasaOS restarts once) and removes
+  `atrio-core`. Other servers are not touched.
+
 ## 0.1.29 — 2026-11-25
 
 0.1.28 was withdrawn a few minutes after its release, before any server installed it: this release has its changes.
