@@ -2,7 +2,9 @@
 
 What changes in each Atrio release. The section for a version is also the text of its GitHub release.
 
-## 0.1.28 — 2026-11-25
+## 0.1.29 — 2026-11-25
+
+0.1.28 was withdrawn a few minutes after its release, before any server installed it: this release has its changes.
 
 **New**
 
