@@ -65,12 +65,13 @@ read_conf() {
 
 # --- What was already sent (key=value lines) -------------------------------------------------
 
+# Keys hold app names, compared as plain text: in a regular expression "a.b" would also match "aXb"
 memory_get() {
-	sed -n "s/^$1=//p" "$MEMORY" 2>/dev/null | head -n 1
+	key="$1=" awk 'index($0, ENVIRON["key"]) == 1 { print substr($0, length(ENVIRON["key"]) + 1); exit }' "$MEMORY" 2>/dev/null
 }
 
 memory_set() {
-	{ grep -v "^$1=" "$MEMORY" 2>/dev/null; printf '%s=%s\n' "$1" "$2"; } > "$MEMORY.tmp"
+	{ key="$1=" awk 'index($0, ENVIRON["key"]) != 1' "$MEMORY" 2>/dev/null; printf '%s=%s\n' "$1" "$2"; } > "$MEMORY.tmp"
 	mv "$MEMORY.tmp" "$MEMORY"
 }
 
