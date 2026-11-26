@@ -84,4 +84,32 @@ check "and the failure is saved" is "$(cut -f3 "$ATRIO_STATE/auto-update-results
 rm -f "$ATRIO_STATE/backup.conf"
 night
 check "the next night it is tried again" is "$(image)" sha256:ffff
+
+# Going back fails too (neither version starts): the same image is still not tried again
+broken=sha256:$(printf '6%.0s' {1..64})
+docker_state "state['remote']['registry-1.docker.io/library/nginx:1.0'] = '$broken'"
+docker_state "state['registry']['nginx:1.0'] = {'id': 'sha256:abab', 'digest': '$broken'}"
+pulls() { grep -c ' pull$' "$FAKE_DOCKER/calls.log"; }
+echo nginx:1.0 > "$FAKE_DOCKER/crash"
+night
+check "when going back fails too, the old image is put back" is "$(image)" sha256:ffff
+check "with the reason of that failure" has "$ATRIO_STATE/auto-update-results" "The files are back, but"
+before=$(pulls)
+night
+check "and the same image is not tried again" is "$(pulls)" "$before"
+rm "$FAKE_DOCKER/crash"
+
+# Uninstalled apps leave both lists; installed ones stay
+add_app other redis:7 sha256:bbbb
+add_app quiet postgres:16 sha256:9999
+request ACTION=auto-updates APP=other AUTO=1
+request ACTION=ignore-updates APP=quiet IGNORE=1
+rm -r "$ATRIO_APPS/web" "$ATRIO_APPS/quiet"
+bash "$SCRIPTS/atrio-backup" --scheduled >/dev/null 2>&1
+check "an uninstalled app leaves the automatic updates" lacks "$ATRIO_STATE/auto-updates" web
+check "and the ignored updates" lacks "$ATRIO_STATE/updates-ignored" quiet
+check "an installed app stays" has "$ATRIO_STATE/auto-updates" other
+add_app web nginx:1.0 sha256:aaaa
+request ACTION=check-updates APP=web
+check "installed again, it has automatic updates off" has "$ATRIO_STATE/updates.json" '"auto":["other"]'
 finish

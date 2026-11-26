@@ -1637,6 +1637,24 @@ auto_result_set() {
 	mv "$AUTO_RESULTS.tmp" "$AUTO_RESULTS"
 }
 
+# An uninstalled app leaves both lists, so that one installed later with the same name does not
+# find automatic updates already on
+forget_removed_apps() {
+	local file app names=() changed=0
+	# Without the apps folder every app would look uninstalled
+	[ -d "$APPS" ] || return 0
+	for file in "$AUTO_UPDATES" "$UPDATES_IGNORED"; do
+		[ -f "$file" ] || continue
+		mapfile -t names < "$file"
+		for app in ${names[@]+"${names[@]}"}; do
+			[ -f "$APPS/$app/docker-compose.yml" ] && continue
+			list_set "$file" "$app" 0
+			changed=1
+		done
+	done
+	[ "$changed" = 0 ] || write_updates
+}
+
 # Run with the automatic backups: once a night, after the planned time, every chosen app that has a
 # newer image is updated, one after the other
 run_auto_updates() {
@@ -1666,11 +1684,12 @@ run_auto_updates() {
 		else
 			message=$(head -n 1 "$result" 2>/dev/null)
 			[ -n "$message" ] || message="The update stopped unexpectedly"
+			# Also when going back failed too: those images did not start either way
 			skip=""
-			[ "$message" = "$ROLLED_BACK" ] && skip="$mark"
+			[ -e "$result.not-started" ] && skip="$mark"
 			auto_result_set "$app" error "$message" "$skip"
 		fi
-		rm -f "$result"
+		rm -f "$result" "$result.not-started"
 	done
 }
 
@@ -1770,6 +1789,8 @@ do_update_app() {
 
 # The new version did not come up: back to the backup made just before, compose file and data
 roll_back() {
+	# Told to the nightly run first: going back can fail too, with a message of its own
+	[ -n "${ATRIO_BACKUP_RESULT:-}" ] && : > "$ATRIO_BACKUP_RESULT.not-started"
 	write_status running "going-back"
 	ROLLBACK=1
 	FROM=""
@@ -1905,6 +1926,7 @@ do_tailscale() {
 case "${1:-}" in
 	--scheduled)
 		run_schedules
+		forget_removed_apps
 		run_auto_updates
 		exit 0
 		;;
