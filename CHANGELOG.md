@@ -4,6 +4,11 @@ What changes in each Atrio release. The section for a version is also the text o
 
 ## 0.1.31 — unreleased
 
+**New**
+
+- **Simplified Chinese** (#15, by YuuuHG): Atrio's own screens are now translated into Simplified Chinese too, not
+  only the ones inherited from CasaOS.
+
 **Fixed**
 
 - **Updating apps with an image chosen by hand** (#13): when the image or tag of an app was changed in its settings
