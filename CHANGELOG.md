@@ -2,7 +2,7 @@
 
 What changes in each Atrio release. The section for a version is also the text of its GitHub release.
 
-## 0.1.31 — unreleased
+## 0.1.31 — 2026-11-27
 
 **New**
 
@@ -16,6 +16,13 @@ What changes in each Atrio release. The section for a version is also the text o
   update button; only selecting the app worked. The button is back, and for these apps Atrio only takes a newer image
   of the tag they use (`5.0.0-develop` stays `5.0.0-develop`), never the App Store's version, which would replace it.
   Ignoring updates and automatic updates are in their menu too.
+- **Automatic updates after a failed rollback**: when a new image did not start and going back to the backup failed
+  too, the next night tried the same image again. Now it waits for a newer one, as it already did after a rollback
+  that worked.
+- **Reinstalled apps**: an app uninstalled while it was set to update automatically, or to ignore updates, kept that
+  setting, and an app installed later with the same name found it already on. Uninstalled apps now leave both lists.
+- **Push alerts for apps with a dot in their name**: the memory of what was already sent could mix up two apps whose
+  names differ only where one has a dot (`my.app` and `myxapp`), so an alert could be skipped or sent twice.
 
 ## 0.1.30 — 2026-11-25
 
