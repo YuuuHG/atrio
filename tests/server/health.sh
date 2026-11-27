@@ -72,4 +72,13 @@ sed -i 's/^ENABLED=1/ENABLED=0/' "$ATRIO_STATE/alerts.conf"
 alerts; alerts
 check "with alerts off the state is still kept" is "$(health web)" crashed
 check "and nothing is sent" test ! -s "$FAKE_DOCKER/sent.log"
+
+# The dot of one app's name must not stand for any character of another's
+add_app a.b nginx:1.0 sha256:aaaa
+add_app aXb nginx:1.0 sha256:aaaa
+docker_state "[c.update(state='exited', exit=1) for c in state['containers'] if c['project'] == 'aXb']"
+alerts; alerts
+check "an app with a dot in its name keeps its own state" is "$(health a.b)" ok
+check "and the app with a similar name keeps its own" is "$(health aXb)" crashed
+check "each has its own memory" is "$(grep -cE '^app_state_a(\.|X)b=' "$ATRIO_STATE/alerts-memory")" 2
 finish
