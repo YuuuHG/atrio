@@ -6,7 +6,7 @@ What changes in each Atrio release. The section for a version is also the text o
 
 **New**
 
-- **Simplified Chinese** (#15, by YuuuHG): Atrio's own screens are now translated into Simplified Chinese too, not
+- **Simplified Chinese** (#15, by @YuuuHG): Atrio's own screens are now translated into Simplified Chinese too, not
   only the ones inherited from CasaOS.
 
 **Fixed**
