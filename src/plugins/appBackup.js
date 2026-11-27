@@ -394,8 +394,45 @@ async function storeImages(openAPI, name) {
  * (CasaOS updates it in the background) or 'updated' (a newer image of the same tag, already done on the server).
  * With `quiet`, nothing is asked or shown, for bulk actions.
  */
+// Updates an app to a newer image of the tag it has now, on the server; nothing else is changed
+async function updateOwnTag(vm, name, title, quiet) {
+	const toast = (message, type, duration = 8000) => {
+		if (!quiet) vm.$buefy.toast.open({ message, type, duration })
+	}
+	if (!await backupsInstalled()) {
+		toast(vm.$t('{title} runs an image chosen in its settings: Atrio updates it on the server, where its services are not installed yet.', { title: escapeHtml(title) }), 'is-warning', 10000)
+		return 'failed'
+	}
+	const digest = await checkDigest(name)
+	if (digest.error) return digestFailed(vm, title, digest.error, quiet)
+	if (digest.state === 'update') {
+		try {
+			return await updateOnServer(vm, name, title, quiet)
+		}
+		catch (e) {
+			return 'failed'
+		}
+	}
+	if (digest.state === 'current') {
+		toast(vm.$t('{title} is up to date', { title: escapeHtml(title) }), 'is-info', 3000)
+		return 'current'
+	}
+	toast(vm.$t('No newer image of {title} was found: the registry of its image did not answer.', { title: escapeHtml(title) }), 'is-info')
+	return 'current'
+}
+
 export async function updateApp(vm, name, title, { quiet = false } = {}) {
 	const compose = vm.$openAPI.appManagement.compose
+	let listed = null
+	try {
+		listed = (await compose.myComposeAppList()).data.data?.[name] || null
+	}
+	catch (e) {
+		// Asked again below
+	}
+	// An app whose image was chosen by hand (CasaOS calls it "uncontrolled", #13) keeps that image:
+	// only a newer image of the same tag, never the App Store's version, which would replace it
+	if (listed?.is_uncontrolled) return updateOwnTag(vm, name, title, quiet)
 	const older = await findDowngrade(vm.$openAPI, name)
 	if (older) {
 		// The App Store's tag is not taken, but a newer image of the tag the app has now is fine
@@ -428,13 +465,8 @@ export async function updateApp(vm, name, title, { quiet = false } = {}) {
 	}
 
 	let backupId = ''
-	let hasUpdate = false
-	try {
-		hasUpdate = Boolean((await compose.myComposeAppList()).data.data?.[name]?.update_available)
-	}
-	catch (e) {
-		// Asked again by CasaOS itself when updating
-	}
+	// When the list did not answer, CasaOS asks again itself when updating
+	const hasUpdate = Boolean(listed?.update_available)
 	// Nothing newer in the App Store: an app on "latest" may still have a newer image of the same tag
 	let digestState = ''
 	if (!hasUpdate && await backupsInstalled()) {

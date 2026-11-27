@@ -343,7 +343,7 @@ export default {
 							<b-icon icon="play" pack="casa" size="is-16" />
 							{{ $t('Start') }}
 						</button>
-						<button v-if="!app.is_uncontrolled" :disabled="!!busy" class="atrio-button" type="button" @click="update">
+						<button :disabled="!!busy" class="atrio-button" type="button" @click="update">
 							<b-icon icon="update-outline" pack="casa" size="is-16" />
 							{{ $t('Update') }}
 						</button>

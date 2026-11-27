@@ -2,6 +2,16 @@
 
 What changes in each Atrio release. The section for a version is also the text of its GitHub release.
 
+## 0.1.31 — unreleased
+
+**Fixed**
+
+- **Updating apps with an image chosen by hand** (#13): when the image or tag of an app was changed in its settings
+  (CasaOS calls it uncontrolled), the tile said "Update available" but the app details and the app menu had no
+  update button; only selecting the app worked. The button is back, and for these apps Atrio only takes a newer image
+  of the tag they use (`5.0.0-develop` stays `5.0.0-develop`), never the App Store's version, which would replace it.
+  Ignoring updates and automatic updates are in their menu too.
+
 ## 0.1.30 — 2026-11-25
 
 **Fixed**

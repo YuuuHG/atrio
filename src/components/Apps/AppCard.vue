@@ -987,13 +987,13 @@ export default {
             </b-button>
           </template>
 
-          <b-button v-if="isV2App && !item.is_uncontrolled" expanded type="is-text" @click="checkAppVersion(item.name)">
+          <b-button v-if="isV2App" expanded type="is-text" @click="checkAppVersion(item.name)">
             {{ updateAvailable ? $t('Update now') : $t('Check then update') }}
           </b-button>
-          <b-button v-if="isV2App && !item.is_uncontrolled" expanded type="is-text" @click="toggleIgnoreUpdates">
+          <b-button v-if="isV2App" expanded type="is-text" @click="toggleIgnoreUpdates">
             {{ updatesIgnored ? $t('Show updates again') : $t('Ignore updates') }}
           </b-button>
-          <b-button v-if="isV2App && !item.is_uncontrolled" expanded type="is-text" @click="toggleAutoUpdates">
+          <b-button v-if="isV2App" expanded type="is-text" @click="toggleAutoUpdates">
             {{ autoUpdates ? $t('Stop automatic updates') : $t('Update automatically') }}
           </b-button>
           <b-button v-if="isV2App || isLinkApp" expanded type="is-text" @click="configApp()">
